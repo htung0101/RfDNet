@@ -28,6 +28,12 @@ def load_demo_data(cfg, device):
     use_height = not cfg.config['data']['no_height']
     num_points = cfg.config['data']['num_point']
 
+    visualization = 1
+    if visualization:
+        pcds = trimesh.PointCloud(point_cloud)
+        axis = trimesh.creation.axis(axis_length=1)
+        (trimesh.Scene(pcds) + axis).show()
+
     if not use_color:
         point_cloud = point_cloud[:, 0:3]  # do not use color for now
     else:
@@ -46,6 +52,56 @@ def load_demo_data(cfg, device):
         if key not in ['object_voxels', 'shapenet_catids', 'shapenet_ids']:
             data[key] = data[key].to(device)
     return data
+
+
+def load_demo_data2(cfg, device):
+    #point_cloud = trimesh.load(cfg.config['demo_path']).vertices
+    point_cloud = np.load("pts_cam.npy", allow_pickle=True)
+    # flip z up
+    npts = point_cloud.shape[0]
+    point_cloud_homo_yup = np.concatenate([point_cloud, np.ones((npts, 1))], axis=1)
+
+    zup_T_yup = np.array([[1, 0, 0, 0],
+                    [0, 0, -1, 0],
+                    [0, 1, 0, 0],
+                    [0, 0, 0, 1]])
+    point_cloud = np.dot(zup_T_yup, point_cloud_homo_yup.T).T[:,:3] * 1.5
+
+    #import ipdb; ipdb.set_trace()
+    visualization = 0
+    if visualization:
+        import trimesh
+        pcds = trimesh.PointCloud(point_cloud)
+        axis = trimesh.creation.axis(axis_length=1)
+        (trimesh.Scene(pcds) + axis).show()
+
+    use_color = cfg.config['data']['use_color_detection'] or cfg.config['data']['use_color_completion']
+    MEAN_COLOR_RGB = np.array([121.87661, 109.73591, 95.61673])
+    use_height = not cfg.config['data']['no_height']
+    num_points = cfg.config['data']['num_point']
+
+
+    if not use_color:
+        point_cloud = point_cloud[:, 0:3]  # do not use color for now
+    else:
+        point_cloud = point_cloud[:, 0:6]
+        point_cloud[:, 3:] = (point_cloud[:, 3:] - MEAN_COLOR_RGB) / 256.0
+
+    if use_height:
+        floor_height = np.percentile(point_cloud[:, 2], 0.99)
+
+        #import ipdb; ipdb.set_trace()
+        height = point_cloud[:, 2] - floor_height
+        point_cloud = np.concatenate([point_cloud, np.expand_dims(height, 1)], 1)
+
+    point_cloud, choices = pc_util.random_sampling(point_cloud, num_points, return_choices=True)
+    data = collate_fn([{'point_clouds': point_cloud.astype(np.float32)}])
+
+    for key in data:
+        if key not in ['object_voxels', 'shapenet_catids', 'shapenet_ids']:
+            data[key] = data[key].to(device)
+    return data
+
 
 def get_proposal_id(cfg, end_points, data, mode='random', batch_sample_ids=None, DUMP_CONF_THRESH=-1.):
     '''
@@ -352,6 +408,8 @@ def visualize(output_dir, offline):
         orientation = bbox_param[6]
         sizes = bbox_param[3:6]
 
+        print(sizes)
+
         obj_points = obj_points - (obj_points.max(0) + obj_points.min(0))/2.
         obj_points = obj_points.dot(transform_m.T)
         obj_points = obj_points.dot(np.diag(1/(obj_points.max(0) - obj_points.min(0)))).dot(np.diag(sizes))
@@ -401,18 +459,20 @@ def run(cfg):
 
     '''Load data'''
     cfg.log_string('Loading data.')
-    input_data = load_demo_data(cfg, device)
+    input_data = load_demo_data2(cfg, device)
 
     '''Run demo'''
     net.train(cfg.config['mode'] == 'train')
     start = time()
     our_data = generate(cfg, net.module, input_data, post_processing=False)
+
     end = time()
     print('Time elapsed: %s.' % (end - start))
 
     '''Save visualization'''
     scene_name = os.path.splitext(os.path.basename(cfg.config['demo_path']))[0]
     output_dir = os.path.join('demo/outputs', scene_name)
+
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
 

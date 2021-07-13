@@ -87,17 +87,24 @@ class SkipPropagation(nn.Module):
         :param box_xyz: (Batch size x N points x 3) point coordinates
         :param box_feature: (Batch size x Feature dim x Num of boxes) box features.
         :param input_point_cloud: (Batch size x Num of pointcloud points x feature dim) box features.
+        :param point_instance_labels: (Batch size x Num of pointcloud points)
+        :param proposal_instance_labels: (Batch size x N points)
         :return:
         '''
 
+        # 8 x 80000 x 4: 8 x 80000 x 3 + 8 x 1 x 80000
         xyz, features = self._break_up_pc(input_point_cloud)
 
+        # 8 x 2 x 80000
         features = torch.cat([features, point_instance_labels.unsqueeze(1)], dim=1)
+
+        # xyz: 8 x 3 x 10 x 1024, features: 8 x 2 x 10 x 1024
         xyz, features = self.stn(xyz, features, box_xyz, box_orientations)
 
         batch_size, _, N_proposals, N_points = features.size()
 
         # get point mask
+        # 8 x 10 x 1024
         instance_labels = features[:, 1]
         instance_point_masks = instance_labels==proposal_instance_labels.unsqueeze(-1).repeat(1,1,N_points)
         instance_point_masks = instance_point_masks.view(batch_size * N_proposals * N_points)
@@ -108,7 +115,11 @@ class SkipPropagation(nn.Module):
         input_features = input_features.permute([0, 2, 3, 1]).contiguous().view(batch_size * N_proposals, N_points, -1)
 
         # use PointNet to predict masks
+        # input features: 80 x 1024 x 4
+        # seg_pred: 80 x 1024 x 2
+        # trans_feat: 80 x 64 x 64
         seg_pred, trans_feat = self.point_seg(input_features.transpose(1,2).contiguous())
+
         seg_pred = seg_pred.contiguous().view(batch_size * N_proposals * N_points, 2)
         point_mask_loss = self.mask_loss_func(seg_pred, instance_point_masks.long(), trans_feat, weight=None)
 

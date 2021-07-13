@@ -1,0 +1,9 @@
+*.pyc
+*.ply
+demo/
+*.so
+runs/
+build/
+out/
+*.npy
+external/libsimplify/simplify_mesh.cpp

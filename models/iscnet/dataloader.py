@@ -19,7 +19,7 @@ import pickle
 default_collate = torch.utils.data.dataloader.default_collate
 MAX_NUM_OBJ = 64
 MEAN_COLOR_RGB = np.array([121.87661, 109.73591, 95.61673])
-
+data_root = "/media/htung/Extreme SSD/fish/RfDNet/"
 class ISCNet_ScanNet(ScanNet):
     def __init__(self, cfg, mode):
         super(ISCNet_ScanNet, self).__init__(cfg, mode)
@@ -27,12 +27,11 @@ class ISCNet_ScanNet(ScanNet):
         self.use_color = cfg.config['data']['use_color_detection'] or cfg.config['data']['use_color_completion']
         self.use_height = not cfg.config['data']['no_height']
         self.augment = mode == 'train'
-        self.shapenet_path = cfg.config['data']['shapenet_path']
+        self.shapenet_path = os.path.join(data_root, cfg.config['data']['shapenet_path'])
         self.points_unpackbits = cfg.config['data']['points_unpackbits']
         self.n_points_object = cfg.config['data']['points_subsample']
         self.points_transform = SubsamplePoints(cfg.config['data']['points_subsample'], mode)
         self.phase = cfg.config[self.mode]['phase']
-
     def __getitem__(self, idx):
         """
         Returns a dict with following keys:
@@ -61,8 +60,10 @@ class ISCNet_ScanNet(ScanNet):
             object_instance_ids.append(item['instance_id'])
             boxes3D.append(item['box3D'])
             classes.append(item['cls_id'])
-            shapenet_catids.append(item['shapenet_catid'])
-            shapenet_ids.append(item['shapenet_id'])
+            shapenet_catids.append("03211117") #item['shapenet_catid'])
+            shapenet_ids.append("1a9e1fb2a51ffd065b07a27512172330") #item['shapenet_id'])
+
+
         boxes3D = np.array(boxes3D)
         scan_data = np.load(data_path['scan'])
         point_cloud = scan_data['mesh_vertices']
@@ -141,6 +142,19 @@ class ISCNet_ScanNet(ScanNet):
         point_instance_labels = point_instance_labels[choices]
 
         '''For Object Detection'''
+        """
+        point_clouds: 80000 x 4 (include height value) (v)
+        center_label: 64 x 3, 64: MAX_NUM_OBJ #box centeroid (v)
+        heading_class_label: 64, bin the rotation into 12 bin => axis aligned? Then don't predict
+        heading_residual_label: 64, residul to the center => no residual
+        size_class_label: 64, class id => object-agnostic, don't do this
+        size_residual_label: 64 x 3, residual of size to the mean of that category (v)
+        sem_cls_label: 64, class id, same as size_class_label => don't do this
+        box_label_mask: 64, binary indicating whether the box exists (v)
+        vote_label: 80000 x 9 # offset, and copy for three times? (v)
+        vote_label_mask: 80000, # Assign first dimension to indicate it is in an object box (v)
+        scan_idx: 4, scan id => don't care
+        """
         ret_dict = {}
         ret_dict['point_clouds'] = point_cloud.astype(np.float32)
         ret_dict['center_label'] = target_bboxes.astype(np.float32)[:, 0:3]
@@ -158,6 +172,15 @@ class ISCNet_ScanNet(ScanNet):
 
         '''For Object Completion'''
         if self.phase == 'completion':
+
+            """
+            object_points: #nobj x total_sampled_points x 3 # self.n_points_objects=1024,1024, meaning half (v)
+                           are positive points (occupied points) half are negative (~occupied) (v)
+            object_points_occ: #nobj x total_num_points_on_object (v)
+            object_instance_labels: 64, instance id, just need to be different for each one (v)
+            point_instance_labels: point assignment to instance labels (v)
+            """
+
             object_points = np.zeros((MAX_NUM_OBJ, np.sum(self.n_points_object), 3))
             object_points_occ = np.zeros((MAX_NUM_OBJ, np.sum(self.n_points_object)))
             points_data = self.get_shapenet_points(shapenet_catids, shapenet_ids, transform=self.points_transform)
@@ -204,6 +227,7 @@ class ISCNet_ScanNet(ScanNet):
     def get_shapenet_points(self, shapenet_catids, shapenet_ids, transform=None):
         '''Load points and corresponding occ values.'''
         shape_data_list = []
+
         for shapenet_catid, shapenet_id in zip(shapenet_catids, shapenet_ids):
             points_dict = np.load(os.path.join(self.shapenet_path, 'point', shapenet_catid, shapenet_id + '.npz'))
             points = points_dict['points']
