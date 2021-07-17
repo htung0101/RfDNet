@@ -475,6 +475,7 @@ class ISCNet(BaseNetwork):
         calculate loss of est_out given gt_out.
         '''
         end_points, completion_loss = est_data[:2]
+
         total_loss = self.detection_loss(end_points, gt_data, self.cfg.dataset_config)
 
         # --------- INSTANCE COMPLETION ---------

@@ -53,10 +53,16 @@ class ProposalModule(nn.Module):
         self.optim_spec = optim_spec
         self.cfg = cfg
         '''Parameters'''
-        self.num_class = cfg.dataset_config.num_class
-        self.num_heading_bin = cfg.dataset_config.num_heading_bin
-        self.num_size_cluster = cfg.dataset_config.num_size_cluster
-        self.mean_size_arr = cfg.dataset_config.mean_size_arr
+        if cfg.config["model"]["detection"]["object_agnostic"]:
+            self.num_class = 1
+            self.num_heading_bin = 1
+            self.num_size_cluster = 1
+            self.mean_size_arr = np.array([0.5, 0.5, 0.5])
+        else:
+            self.num_class = cfg.dataset_config.num_class
+            self.num_heading_bin = cfg.dataset_config.num_heading_bin
+            self.num_size_cluster = cfg.dataset_config.num_size_cluster
+            self.mean_size_arr = cfg.dataset_config.mean_size_arr
         self.num_proposal = cfg.config['data']['num_target']
         self.sampling = cfg.config['data']['cluster_sampling']
         self.seed_feat_dim = 256

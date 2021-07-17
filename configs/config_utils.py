@@ -146,4 +146,21 @@ def mount_external_config(cfg):
                        'dataset_config': dataset_config}
 
         setattr(cfg, 'eval_config', CONFIG_DICT)
+    elif cfg.config['data']['dataset'] == 'tdw_physics':
+        from configs.tdw_physics_config import TdwPhysicsConfig
+        dataset_config = TdwPhysicsConfig()
+        setattr(cfg, 'dataset_config', dataset_config)
+
+        # Used for AP calculation
+        eval_cfg = cfg.config.get('val', cfg.config.get('test'))
+        CONFIG_DICT = {'remove_empty_box': not eval_cfg['faster_eval'],
+                       'use_3d_nms': eval_cfg['use_3d_nms'],
+                       'nms_iou': eval_cfg['nms_iou'],
+                       'use_old_type_nms': eval_cfg['use_old_type_nms'],
+                       'cls_nms': eval_cfg['use_cls_nms'],
+                       'per_class_proposal': eval_cfg['per_class_proposal'],
+                       'conf_thresh': eval_cfg['conf_thresh'],
+                       'dataset_config': dataset_config}
+
+        setattr(cfg, 'eval_config', CONFIG_DICT)
     return cfg

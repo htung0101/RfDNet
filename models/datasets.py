@@ -6,7 +6,6 @@ from torch.utils.data import Dataset
 import json
 from utils.read_and_write import read_json
 
-data_root = "/media/htung/Extreme SSD/fish/RfDNet/"
 class ScanNet(Dataset):
     def __init__(self, cfg, mode):
         '''
@@ -17,15 +16,48 @@ class ScanNet(Dataset):
         self.config = cfg.config
         self.dataset_config = cfg.dataset_config
         self.mode = mode
-        split_file = os.path.join(cfg.config['data']['split'], 'scannetv2_' + mode + '.json')
 
-        self.split = read_json(split_file)
+        if self.config['data']['dataset'] == 'scannet':
+            self.data_root = "/media/htung/Extreme SSD/fish/RfDNet/"
+            split_file = os.path.join(cfg.config['data']['split'], 'scannetv2_' + mode + '.json')
 
-        for file_id, file in enumerate(self.split):
-            self.split[file_id]['scan'] = os.path.join(data_root, file['scan'])
-            self.split[file_id]['bbox'] = os.path.join(data_root, file['bbox'])
-        self.split = [file for file in self.split if "scene000" in file["scan"]]
+            self.split = read_json(split_file)
+
+            for file_id, file in enumerate(self.split):
+                self.split[file_id]['scan'] = os.path.join(self.data_root, file['scan'])
+                self.split[file_id]['bbox'] = os.path.join(self.data_root, file['bbox'])
+            self.split = [file for file in self.split if "scene000" in file["scan"]]
+        elif self.config['data']['dataset'] == 'tdw_physics':
+            self.data_names = ['positions', 'velocities']
+            self.all_trials = []
+            self.n_rollout = 0
+            self.data_root = "/media/htung/Extreme SSD/fish/DPI-Net/"
+            if mode == "val":
+                mode = "valid"
+
+            self.data_dir = [os.path.join(self.data_root, cfg.config['data']['split'], mode)]
+
+            for ddir in self.data_dir:
+                file = open(ddir +  ".txt", "r")
+                ddir_root = "/".join(ddir.split("/")[:-1])
+                trial_names = [line.strip("\n") for line in file if line != "\n"]
+                n_trials = len(trial_names)
+
+                self.all_trials += [os.path.join(ddir_root, trial_name) for trial_name in trial_names]
+                self.n_rollout += n_trials
+
+            if mode == "train":
+                self.mean_time_step = int(13499/self.n_rollout) + 1
+            else:
+                self.mean_time_step = 1
 
 
     def __len__(self):
+
+        if self.config['data']['dataset'] == 'scannet':
+            return len(self.split)
+            # each rollout can have different length, sample length in get_item
+        elif self.config['data']['dataset'] == 'tdw_physics':
+            return self.n_rollout * self.mean_time_step
+
         return len(self.split)

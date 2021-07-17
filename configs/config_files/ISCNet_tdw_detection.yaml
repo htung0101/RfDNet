@@ -8,9 +8,9 @@ device:
   gpu_ids: '0,1'
   num_workers: 0
 data:
-  dataset: scannet
-  split: datasets/splits/fullscan
-  num_point: 80000
+  dataset: tdw_physics
+  split: data_with_depth/dominoes #potentially can be a list
+  num_point: 50000
   num_target: 256
   vote_factor: 1
   cluster_sampling: vote_fps
@@ -29,6 +29,7 @@ data:
   use_cls_for_completion: False
   skip_propagate: True
 model:
+
   backbone:
     method: Pointnet2Backbone
     loss: Null
@@ -36,7 +37,7 @@ model:
     method: VotingModule
     loss: Null
   detection:
-    object_agnostic: False
+    object_agnostic: True
     method: ProposalModule
     loss: DetectionLoss
   skip_propagation:

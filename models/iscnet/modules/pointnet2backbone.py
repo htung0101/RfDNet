@@ -97,6 +97,7 @@ class Pointnet2Backbone(nn.Module):
 
         # --------- 4 SET ABSTRACTION LAYERS ---------
         xyz, features, fps_inds = self.sa1(xyz, features)
+        # xyz are the farthest points from the input points, inds are the corresponding index
         end_points['sa1_inds'] = fps_inds
         end_points['sa1_xyz'] = xyz
         end_points['sa1_features'] = features
@@ -122,5 +123,6 @@ class Pointnet2Backbone(nn.Module):
         end_points['fp2_xyz'] = end_points['sa2_xyz']
         num_seed = end_points['fp2_xyz'].shape[1]
         end_points['fp2_inds'] = end_points['sa1_inds'][:, 0:num_seed]  # indices among the entire input point clouds
+
         return end_points
 

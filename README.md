@@ -11,6 +11,11 @@ From an incomplete point cloud of a 3D scene (left), our method learns to jointl
 
 ---
 
+### TODO
+
+- configs/config_utils.py has some dataset specific args
+
+
 ### Install
 1. This implementation uses Python 3.6, [Pytorch1.7.1](http://pytorch.org/), cudatoolkit 11.0. We recommend to use [conda](https://docs.conda.io/en/latest/miniconda.html) to deploy the environment.
    * Install with conda:
@@ -22,7 +27,7 @@ From an incomplete point cloud of a 3D scene (left), our method learns to jointl
     ```
     pip install -r requirements.txt
     ```
-   
+
 2. Next, compile the external libraries by
     ```
     python setup.py build_ext --inplace
@@ -94,41 +99,41 @@ datasets/ShapeNetv2_data/watertight_scaled_simplified
 or <br>
 
 1. Download [ShapeNetCore.v2](https://shapenet.org/) to the path below
-   
+
     ```
     datasets/ShapeNetCore.v2
    ```
-   
+
 2. Process ShapeNet models into watertight meshes by
-   
+
     ```
     python utils/shapenet/1_fuse_shapenetv2.py
    ```
-   
+
 3. Sample points on ShapeNet models for training (similar to [Occupancy Networks](https://github.com/autonomousvision/occupancy_networks)).
-   
+
     ```
     python utils/shapenet/2_sample_mesh.py --resize --packbits --float16
    ```
-   
+
 4. There are usually 100K+ points per object mesh. We simplify them to speed up our testing and visualization by
-   
+
     ```
     python utils/shapenet/3_simplify_fusion.py --in_dir datasets/ShapeNetv2_data/watertight_scaled --out_dir datasets/ShapeNetv2_data/watertight_scaled_simplified
    ```
-   
+
 
 ##### Verify preprocessed data
    After preprocessed the data, you can run the visualization script below to check if they are generated correctly.
-   
+
    * Visualize ScanNet+Scan2CAD+ShapeNet samples by
-     
+
       ```
       python utils/scannet/visualization/vis_gt.py
       ```
-     
+
       A VTK window will be popped up like below.
-   
+
       <img src="out/samples/scene0001_00/verify.png" alt="verify.png" width="60%" />
 
 ---
@@ -140,7 +145,7 @@ You can check a template at `configs/config_files/ISCNet.yaml`.
 We firstly pretrain our **detection** module and **completion** module followed by a joint refining. You can follow the process below.
 
 1. Pretrain the **detection** module by
-   
+
    ```
    python main.py --config configs/config_files/ISCNet_detection.yaml --mode train
    ```
@@ -157,7 +162,7 @@ We firstly pretrain our **detection** module and **completion** module followed 
    ```
    It will save the completion module weight at
    `out/iscnet/a_folder_with_completion_module/model_best.pth`
-   
+
 3. Copy the weight path of completion module (see 2.) into `configs/config_files/ISCNet.yaml` as
    ```
    weight: ['out/iscnet/a_folder_with_completion_module/model_best.pth']
@@ -181,7 +186,7 @@ Run below to output all scenes in the test set.
    ```
 The 3D scenes for visualization are saved in the folder of `out/iscnet/a_folder_with_generated_scenes/visualization`. You can visualize a triplet of (input, pred, gt) following a demo below
    ```
-   python utils/scannet/visualization/vis_for_comparison.py 
+   python utils/scannet/visualization/vis_for_comparison.py
    ```
 If everything goes smooth, there will be three windows (corresponding to input, pred, gt) popped up by sequence as
 
@@ -195,9 +200,9 @@ You can choose each of the following ways for evaluation.
 1. You can export all scenes above to calculate the evaluation metrics with any external library (for researchers who would like to unify the benchmark).
    Lower the `dump_threshold` in `ISCNet_test.yaml` in generation to enable more object proposals for mAP calculation (e.g. `dump_threshold=0.05`).
 
-2. In our evaluation, we voxelize the 3D scenes to keep consistent resolution with the baseline methods. To enable this, 
+2. In our evaluation, we voxelize the 3D scenes to keep consistent resolution with the baseline methods. To enable this,
    1. make sure the executable [binvox](https://www.patrickmin.com/binvox/ ) are downloaded and configured as an experiment variable (e.g. export its path in ~/.bashrc for Ubuntu). It will be deployed by [Trimesh](https://trimsh.org/trimesh.exchange.binvox.html#trimesh.exchange.binvox.voxelize_mesh).
-   
+
    2. Change the `ISCNet_test.yaml` as below for evaluation.
    ```
       test:
@@ -220,7 +225,7 @@ You can choose each of the following ways for evaluation.
    You can switch on/off it following `demo.py`.
 3. A different learning rate scheduler is adopted.
    The learning rate decreases to 0.1x if there is no gain within 20 steps, which is much more efficient.
-   
+
 
 ---
 
@@ -245,11 +250,11 @@ RfD-Net is relased under the MIT License. See the [LICENSE file](https://github.
 
 
 
-   
 
 
 
 
-   
+
+
 
 
