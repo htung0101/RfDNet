@@ -2,6 +2,7 @@
 # author: ynie
 # date: Feb, 2020
 
+from torch.utils.tensorboard import SummaryWriter
 class BaseTrainer(object):
     '''
     Base trainer for all networks.
@@ -11,6 +12,7 @@ class BaseTrainer(object):
         self.net = net
         self.optimizer = optimizer
         self.device = device
+        self.writer = SummaryWriter("log")
 
     def show_lr(self):
         '''

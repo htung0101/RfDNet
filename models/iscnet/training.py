@@ -66,9 +66,89 @@ class Trainer(BaseTrainer):
         '''
         '''load input and ground-truth data'''
         data = self.to_device(data)
+        #self.writer.add_iamge
 
+        if self.visualization:
+            import trimesh
+            point_cloud = data["point_clouds"][0].cpu().numpy()
+            axis = trimesh.creation.axis(axis_length=1)
+            world_colors = np.repeat(np.array([[0,0,0,0.5]]), point_cloud.shape[0], axis=0)
+            #for object_id in range(nobjects):
+            #    world_colors[point_instance_labels == object_id] = self.color_base[object_id][np.newaxis, :]
+
+            box_label_mask = data["box_label_mask"][0].cpu().numpy()
+            center_label = data["center_label"][0].cpu().numpy()
+            size_residual_label = data["size_residual_label"][0].cpu().numpy()
+
+            meshes = []
+            for obj_id in range(box_label_mask.shape[0]):
+                if box_label_mask[obj_id] == 1:
+                    size = size_residual_label[obj_id] + np.array([0.4, 0.4, 0.4])
+                    obj_center = center_label[obj_id]
+                    mat = np.eye(4)
+                    mat[:3, 3] = obj_center
+                    mesh = trimesh.creation.box(extents=size, transform=mat)
+                    mesh.visual.face_colors = [255, 100, 200, 100]
+                    meshes.append(mesh)
+
+                    #center_mesh = trimesh.creation.box(extents=np.array([0.03, 0.03, 0.03]), transform=mat)
+                    #center_mesh.visual.face_colors = [255, 0, 0, 255]
+                    #meshes.append(center_mesh)
+
+            #for object_id in range(nobjects):
+            pcds = trimesh.PointCloud(point_cloud[:,:3], world_colors)
+            merged_mesh = sum(meshes)
+            (trimesh.Scene(pcds) + axis + merged_mesh).show()
+
+        # box_label_mask = data["box_label_mask"][0].cpu().numpy()
+        # point_cloud = data["point_clouds"][:1, :, :3].cpu().numpy()
+        # center_label = data["center_label"][0].cpu().numpy()
+        # size_residual_label = data["size_residual_label"][0].cpu().numpy()
+        # grid = np.array([[-1, -1, -1],
+        #                  [-1, -1,  1],
+        #                  [-1,  1, -1],
+        #                  [-1,  1,  1],
+        #                  [ 1, -1, -1],
+        #                  [ 1, -1,  1],
+        #                  [ 1,  1, -1],
+        #                  [ 1,  1,  1]])
+        # face_ids = np.array([[1,  2,  3],
+        #                   [2,  3,  7],
+        #                   [1,  2,  5],
+        #                   [2,  5,  6],
+        #                   [3,  7,  4],
+        #                   [7,  8,  4]])
+
+        # obj_centers = []
+        # colors = []
+        # sizes = []
+        # faces = []
+        # start_id  = point_cloud.shape[1]
+        # for obj_id in range(box_label_mask.shape[0]):
+        #     if box_label_mask[obj_id] == 1:
+        #         size = size_residual_label[obj_id] + np.array([0.4, 0.4, 0.4])
+        #         obj_center = center_label[obj_id]
+        #         corners = grid * 0.5 * size[np.newaxis, :] + obj_center[np.newaxis, :]
+
+        #         faces.append(face_ids + start_id)
+        #         start_id += 8
+
+
+        #         obj_centers.append(corners[np.newaxis, :])
+        #         colors.append(np.array([[[255, 0, 0]]]))
+
+        # point_cloud_merged = np.concatenate([point_cloud]+obj_center, axis=1)
+        # colors_merged = np.concatenate([np.zeros_like(point_cloud) ]+colors, axis=1)
+        # faces_merged = np.concatenate(faces, axis=0)[np.newaxis, :, :]
+        # self.writer.add_mesh("input point cloud", vertices=point_cloud_merged, colors=colors_merged, faces=faces)
+        # self.writer.add_image("input rgb image", data["rgb_image"][0, :, :, :].permute(2, 0, 1))
         '''network forwarding'''
         est_data = self.net(data)
+
+
+        #self.writer()
+
+        import ipdb; ipdb.set_trace()
 
         '''computer losses'''
         loss = self.net.module.loss(est_data, data)

@@ -244,7 +244,7 @@ class ISCNet_TdwPhysics(ScanNet):
         self.num_points = cfg.config['data']['num_point']
         self.use_color = cfg.config['data']['use_color_detection'] or cfg.config['data']['use_color_completion']
         self.use_height = not cfg.config['data']['no_height']
-        self.augment = mode == 'train'
+        self.augment = False #mode == 'train'
         self.shapenet_path = os.path.join(data_root, cfg.config['data']['shapenet_path'])
         self.points_unpackbits = cfg.config['data']['points_unpackbits']
         self.n_points_object = cfg.config['data']['points_subsample']
@@ -326,13 +326,12 @@ class ISCNet_TdwPhysics(ScanNet):
             rot = R.from_quat(obj_rotations[object_id]).as_matrix()
             trans = obj_positions[object_id]
             new_vertices = (np.matmul(rot, vertices.T) + np.expand_dims(trans, 1)).T[:, :3]
-
             mesh = trimesh.Trimesh(vertices=new_vertices, faces=faces)
             mesh.visual.face_colors = [200, 200, 250, 100] # for visualization
             meshes.append(mesh)
             min_bound, max_bound = mesh.bounds
             box3D = np.zeros((7))
-            box3D[:3] = (min_bound + max_bound)/5
+            box3D[:3] = (min_bound + max_bound)/2
             box3D[3:6] = max_bound - min_bound
 
             boxes3D.append(box3D)
@@ -386,6 +385,7 @@ class ISCNet_TdwPhysics(ScanNet):
             point_cloud = np.concatenate([point_cloud, np.expand_dims(height, 1)], 1)
 
         '''Augment'''
+
         if self.augment:
             if np.random.random() > 0.5:
                 # Flipping along the YZ plane
@@ -464,6 +464,8 @@ class ISCNet_TdwPhysics(ScanNet):
         """
         ret_dict = {}
         ret_dict['point_clouds'] = point_cloud.astype(np.float32)
+        ret_dict["rgb_image"] = image
+        ret_dict["depth_image"] = depth
         ret_dict['center_label'] = target_bboxes.astype(np.float32)[:, 0:3]
         ret_dict['heading_class_label'] = angle_classes.astype(np.int64)
         ret_dict['heading_residual_label'] = angle_residuals.astype(np.float32)
