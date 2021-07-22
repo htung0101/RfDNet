@@ -3,9 +3,9 @@ import os
 import trimesh
 import copy
 import matplotlib.pyplot as plt
-import binvox_rw as binvox_rw
+#import binvox_rw as binvox_rw
 import math
-import utils_basic
+import net_utils.basic as utils_basic
 
 import ipdb
 st = ipdb.set_trace

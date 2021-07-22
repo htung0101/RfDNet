@@ -72,7 +72,11 @@ def compute_vote_loss(est_data, gt_data):
     #   with inds in shape B,num_seed,9 and 9 = GT_VOTE_FACTOR * 3
     seed_gt_votes_mask = torch.gather(gt_data['vote_label_mask'], 1, seed_inds)
     seed_inds_expand = seed_inds.view(batch_size, num_seed, 1).repeat(1, 1, 3 * GT_VOTE_FACTOR)
+    seed_inds_expand2 = seed_inds.view(batch_size, num_seed, 1).repeat(1, 1, 3)
     seed_gt_votes = torch.gather(gt_data['vote_label'], 1, seed_inds_expand)
+
+    #seed_gt_votes2 = torch.gather(gt_data['point_clouds'], 1, seed_inds_expand2)
+
     seed_gt_votes += est_data['seed_xyz'].repeat(1, 1, 3)
 
     # Compute the min of min of distance
@@ -82,6 +86,14 @@ def compute_vote_loss(est_data, gt_data):
                                                3)  # from B,num_seed,3*GT_VOTE_FACTOR to B*num_seed,GT_VOTE_FACTOR,3
     # A predicted vote to no where is not penalized as long as there is a good vote near the GT vote.
     dist1, _, dist2, _ = nn_distance(vote_xyz_reshape, seed_gt_votes_reshape, l1=True)
+
+    # tmp = seed_gt_votes * seed_gt_votes_mask[:,:,np.newaxis]
+    # center = gt_data["point_clouds"][:,:,:3] + gt_data["vote_label"][:,:,:3]
+
+    # center222 = torch.gather(center, 1, seed_inds_expand2)
+    # center222_mask = seed_gt_votes_mask[:,:,np.newaxis] * center222
+    # ret_dict['center_label'][0, :10,:]
+
     votes_dist, _ = torch.min(dist2, dim=1)  # (B*num_seed,vote_factor) to (B*num_seed,)
     votes_dist = votes_dist.view(batch_size, num_seed)
     vote_loss = torch.sum(votes_dist * seed_gt_votes_mask.float()) / (torch.sum(seed_gt_votes_mask.float()) + 1e-6)

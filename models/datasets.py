@@ -5,6 +5,20 @@ import os
 from torch.utils.data import Dataset
 import json
 from utils.read_and_write import read_json
+import socket
+
+hostname = socket.gethostname()
+if hostname == "aw-m17-R2":
+    data_path = f"/media/htung/Extreme SSD/fish/"
+elif hostname.endswith("ccncluster") or "physion" in hostname:
+    data_path = f"/mnt/fs4/hsiaoyut"
+    if hostname.endswith("node19-ccncluster"):
+        data_root = "/mnt/fs1/hsiaoyut/DPI-Net/data/"
+    #if "physion" in hostname:
+    out_root = "/mnt/fs1/hsiaoyut"
+else:
+    raise ValueError
+
 
 class ScanNet(Dataset):
     def __init__(self, cfg, mode):
@@ -18,7 +32,7 @@ class ScanNet(Dataset):
         self.mode = mode
 
         if self.config['data']['dataset'] == 'scannet':
-            self.data_root = "/media/htung/Extreme SSD/fish/RfDNet/"
+            self.data_root = os.path.join(data_path, "RfDNet/")
             split_file = os.path.join(cfg.config['data']['split'], 'scannetv2_' + mode + '.json')
 
             self.split = read_json(split_file)
@@ -31,7 +45,7 @@ class ScanNet(Dataset):
             self.data_names = ['positions', 'velocities']
             self.all_trials = []
             self.n_rollout = 0
-            self.data_root = "/media/htung/Extreme SSD/fish/DPI-Net/"
+            self.data_root = os.path.join(data_path, "DPI-Net/")
             if mode == "val":
                 mode = "valid"
 

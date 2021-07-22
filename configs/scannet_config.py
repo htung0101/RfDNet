@@ -23,6 +23,7 @@ class ScannetConfig(object):
         self.data_path = 'datasets/scannet/processed_data'
         for i in range(self.num_size_cluster):
             self.type_mean_size[self.class2type[i]] = self.mean_size_arr[i, :]
+        self.with_rotation = True
 
     def angle2class(self, angle):
         ''' Convert continuous angle to discrete class

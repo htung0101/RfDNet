@@ -83,7 +83,7 @@ class ISCNet_ScanNet(ScanNet):
             point_cloud[:, 3:] = (point_cloud[:, 3:] - MEAN_COLOR_RGB) / 256.0
 
         if self.use_height:
-            floor_height = np.percentile(point_cloud[:, 2], 0.99)
+            floor_height = np.percentile(point_cloud[:, 2], 0.99) #1%
             height = point_cloud[:, 2] - floor_height
             point_cloud = np.concatenate([point_cloud, np.expand_dims(height, 1)], 1)
 
@@ -308,6 +308,20 @@ class ISCNet_TdwPhysics(ScanNet):
 
         data_path = os.path.join(data_dir, str(idx_rollout), str(idx_timestep) + '.h5')
         obj_positions, obj_rotations, world_T_cam, pix_T_cam, image, depth, id_map = load_data_dominoes(self.data_names, data_path, phases_dict, load_data_names=self.load_data_names)
+        # change to zup
+        zup_T_world = np.array([[1, 0, 0, 0],
+                                [0, 0,-1, 0],
+                                [0, 1, 0, 0],
+                                [0, 0, 0, 1],], dtype=np.float32)
+        world_T_cam = np.matmul(zup_T_world, world_T_cam)
+        rot = R.from_quat(obj_rotations).as_matrix()
+        ones = np.array([[[0,0,0,1]]], dtype=np.float32)
+        batch_size = obj_positions.shape[0]
+        mat = np.concatenate([np.concatenate([rot, obj_positions[:,:,np.newaxis]], axis=2),  np.tile(ones, (batch_size, 1, 1))], axis=1)
+        newmat = np.matmul(zup_T_world[np.newaxis, :, :], mat)
+        obj_positions = newmat[:, :3, 3]
+        obj_rotations = R.from_matrix(newmat[:, :3, :3]).as_quat()
+
 
         nobjects = len(phases_dict["vertices_faces"])
         assert(nobjects == obj_positions.shape[0])
@@ -349,13 +363,16 @@ class ISCNet_TdwPhysics(ScanNet):
         point_cloud = pts_world
         point_cloud_ids = np.reshape(id_map, [-1])[indices]
 
-        point_votes = np.repeat(np.array([[0]*10]), pts_world.shape[0], axis=0)
+        point_votes = np.repeat(np.array([[0]*10], dtype=np.float32), pts_world.shape[0], axis=0)
         for object_id in range(nobjects):
             object_center = boxes3D[object_id][:3]
+
+            #if object_id > 0:
             point_votes[point_cloud_ids == object_id, 0] = 1
             point_votes[point_cloud_ids == object_id, 1:4] = object_center - point_cloud[point_cloud_ids == object_id]
             point_votes[point_cloud_ids == object_id, 4:7] = object_center - point_cloud[point_cloud_ids == object_id]
             point_votes[point_cloud_ids == object_id, 7:10] = object_center - point_cloud[point_cloud_ids == object_id]
+
 
         point_instance_labels = point_cloud_ids
 
@@ -433,6 +450,9 @@ class ISCNet_TdwPhysics(ScanNet):
         # NOTE: set size class as semantic class. Consider use size2class.
         size_classes[0:boxes3D.shape[0]] = classes
         size_residuals[0:boxes3D.shape[0], :] = boxes3D[:, 3:6] - self.dataset_config.mean_size_arr
+
+        # delete first object
+        #target_bboxes_mask[0:boxes3D.shape[0]] = 1
         target_bboxes_mask[0:boxes3D.shape[0]] = 1
         target_bboxes[0:boxes3D.shape[0], :] = boxes3D[:,0:6]
         object_instance_labels[0:boxes3D.shape[0]] = object_instance_ids
@@ -462,6 +482,9 @@ class ISCNet_TdwPhysics(ScanNet):
         (v) vote_label_mask: 80000, # Assign first dimension to indicate it is in an object box (v)
         scan_idx: 4, scan id => don't care
         """
+        # mask out the flat mat
+        #target_bboxes_mask[0] = 0
+
         ret_dict = {}
         ret_dict['point_clouds'] = point_cloud.astype(np.float32)
         ret_dict["rgb_image"] = image
@@ -478,6 +501,9 @@ class ISCNet_TdwPhysics(ScanNet):
         ret_dict['vote_label'] = point_votes.astype(np.float32)
         ret_dict['vote_label_mask'] = point_votes_mask.astype(np.int64)
         ret_dict['scan_idx'] = np.array(idx).astype(np.int64)
+
+        #print("center_label", ret_dict['center_label'][:10,:])
+
 
         '''For Object Completion'''
         if self.phase == 'completion':

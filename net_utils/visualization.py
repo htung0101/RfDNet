@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 plt.switch_backend('agg')
 from mpl_toolkits.mplot3d import Axes3D
 from torchvision.utils import save_image
+import matplotlib.patches as patches
 
 def visualize_voxels(voxels, out_file=None, show=False):
     '''
@@ -66,6 +67,58 @@ def visualize_pointcloud(points, normals=None,
         plt.savefig(out_file)
     if show:
         plt.show()
+    plt.close(fig)
+
+
+
+def visualize_pointcloud_boxes(points, bboxes, box_label_mask=None, normals=None,
+                         out_file=None, show=False):
+    '''
+    Visualizes point cloud data.
+    :param points (tensor, Npoints x 3): point data
+    :param bboes (Nobjects x 6): normal data (if existing), xyz, hwd
+    :param box_label_mask (Nobjects): whether object exists or not
+    :param out_file (string): output file
+    :param show (bool): whether the plot should be shown
+    :return:
+    '''
+    # Use numpy
+
+    #for object_id in range(nobjects):
+
+    fig = plt.figure()
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(30, 15))
+    #ax = fig.add_subplot(111, projection='3d')
+    #ax.scatter(pts_world[:, 0], pts_world[:, 1], pts_world[:, 2], s=0.01)
+    if box_label_mask is None:
+        nobjects = bboxes.shape[0]
+        box_label_mask = np.ones((nobjects))
+    # xy plane
+    ax1.scatter(points[:, 0], points[:, 2], s=0.01) #top view xz
+    ax2.scatter(points[:, 0], points[:, 1], s=0.01) #side view xy
+    ax1.set_xlim(-5, 5)
+    ax1.set_ylim(-5, 5)
+    ax2.set_xlim(-5, 5)
+    ax2.set_ylim(-5, 5)
+    ax1.set_xlabel("x")
+    ax1.set_ylabel("z")
+    ax2.set_xlabel("x")
+    ax2.set_ylabel("y")
+
+    #ax1.invert_yaxis()
+
+    nobjects = bboxes.shape[0]
+    for obj_id in range(nobjects):
+        if box_label_mask[obj_id] > 0.5:
+            obj_center = bboxes[obj_id][:3]
+            size = bboxes[obj_id][3:6]
+            rect = patches.Rectangle((obj_center[0] - size[0] * 0.5, obj_center[2] - size[2] * 0.5), size[0], size[2], linewidth=1, edgecolor='r', facecolor='none')
+            rect2 = patches.Rectangle((obj_center[0] - size[0] * 0.5, obj_center[1] - size[1] * 0.5), size[0], size[1], linewidth=1, edgecolor='r', facecolor='none')
+
+            ax1.add_patch(rect)
+            ax2.add_patch(rect2)
+
+    plt.savefig(out_file)
     plt.close(fig)
 
 def visualize_data(data, data_type, out_file):

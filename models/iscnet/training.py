@@ -6,6 +6,7 @@ import torch
 import numpy as np
 import os
 from net_utils import visualization as vis
+from net_utils.ap_helper import parse_predictions, parse_groundtruths
 
 class Trainer(BaseTrainer):
     '''
@@ -31,9 +32,44 @@ class Trainer(BaseTrainer):
         with torch.no_grad():
             '''network forwarding'''
             est_data = self.net({**data, 'export_shape':True})
-            voxels_out, proposal_to_gt_box_w_cls_list = est_data[2:4]
+            end_points, _,voxels_out, proposal_to_gt_box_w_cls_list = est_data
 
-        if proposal_to_gt_box_w_cls_list is None:
+        pts_world = data["point_clouds"][0, :, :3].cpu().numpy()
+        box_label_mask = data["box_label_mask"][0].cpu().numpy()
+        center_label = data["center_label"][0].cpu().numpy()
+        size_residual_label = data["size_residual_label"][0].cpu().numpy()
+        rgb_image = data["rgb_image"][0].cpu().numpy()
+
+        mat = np.array([[1, 0, 0],
+                  [0, 0, 1],
+                  [0,-1, 0]])
+
+        parsed_gts = parse_groundtruths(data, self.cfg.eval_config)
+        bboxes_corner = parsed_gts["gt_corners_3d_upright_camera"][0]#world
+        bboxes_corner = np.matmul(mat[np.newaxis, :, :], bboxes_corner.transpose(0, 2, 1)).transpose(0, 2, 1)
+
+        bboxes_center = np.mean(bboxes_corner, axis=1)
+        bboxes_extent = np.max(bboxes_corner, axis=1) - np.min(bboxes_corner, axis=1)
+        bboxes_gt = np.concatenate([bboxes_center, bboxes_extent], axis=1)
+        #bboxes_gt = np.concatenate([center_label, size_residual_label + 0.4], axis=1)
+        vis.visualize_pointcloud_boxes(pts_world, bboxes_gt, box_label_mask=box_label_mask, out_file=os.path.join(self.cfg.config['log']['vis_path'], "%s_%s_%s_gt_detection.png" % (epoch, phase, iter)))
+
+
+        eval_dict, parsed_predictions = parse_predictions(end_points, data, self.cfg.eval_config)
+        bboxes_corner = parsed_predictions["pred_corners_3d_upright_camera"][0]
+        bboxes_corner = np.matmul(mat[np.newaxis, :, :], bboxes_corner.transpose(0, 2, 1)).transpose(0, 2, 1)
+
+        bboxes_center = np.mean(bboxes_corner, axis=1)
+        bboxes_extent = np.max(bboxes_corner, axis=1) - np.min(bboxes_corner, axis=1)
+        bboxes_pred = np.concatenate([bboxes_center, bboxes_extent], axis=1)
+
+        vis.visualize_pointcloud_boxes(pts_world, bboxes_pred, box_label_mask=eval_dict["pred_mask"][0] * parsed_predictions["obj_prob"][0], out_file=os.path.join(self.cfg.config['log']['vis_path'], "%s_%s_%s_pred_detection.png" % (epoch, phase, iter)))
+
+        parsed_gts = parse_groundtruths(data, self.cfg.eval_config)
+
+
+
+        if proposal_to_gt_box_w_cls_list is None: # when doing object detection only
             return
 
         sample_ids = np.random.choice(voxels_out.shape[0], 3, replace=False) if voxels_out.shape[0]>=3 else range(voxels_out.shape[0])
@@ -59,6 +95,7 @@ class Trainer(BaseTrainer):
         return data
 
     def compute_loss(self, data):
+        self.visualization = False
         '''
         compute the overall loss.
         :param data (dict): data dictionary
@@ -70,6 +107,8 @@ class Trainer(BaseTrainer):
 
         if self.visualization:
             import trimesh
+            import imageio
+            imageio.imwrite("rgb.png", data["rgb_image"][0].cpu().numpy())
             point_cloud = data["point_clouds"][0].cpu().numpy()
             axis = trimesh.creation.axis(axis_length=1)
             world_colors = np.repeat(np.array([[0,0,0,0.5]]), point_cloud.shape[0], axis=0)
@@ -88,7 +127,7 @@ class Trainer(BaseTrainer):
                     mat = np.eye(4)
                     mat[:3, 3] = obj_center
                     mesh = trimesh.creation.box(extents=size, transform=mat)
-                    mesh.visual.face_colors = [255, 100, 200, 100]
+                    mesh.visual.face_colors = [255, 100, 200, 180]
                     meshes.append(mesh)
 
                     #center_mesh = trimesh.creation.box(extents=np.array([0.03, 0.03, 0.03]), transform=mat)
@@ -100,56 +139,14 @@ class Trainer(BaseTrainer):
             merged_mesh = sum(meshes)
             (trimesh.Scene(pcds) + axis + merged_mesh).show()
 
-        # box_label_mask = data["box_label_mask"][0].cpu().numpy()
-        # point_cloud = data["point_clouds"][:1, :, :3].cpu().numpy()
-        # center_label = data["center_label"][0].cpu().numpy()
-        # size_residual_label = data["size_residual_label"][0].cpu().numpy()
-        # grid = np.array([[-1, -1, -1],
-        #                  [-1, -1,  1],
-        #                  [-1,  1, -1],
-        #                  [-1,  1,  1],
-        #                  [ 1, -1, -1],
-        #                  [ 1, -1,  1],
-        #                  [ 1,  1, -1],
-        #                  [ 1,  1,  1]])
-        # face_ids = np.array([[1,  2,  3],
-        #                   [2,  3,  7],
-        #                   [1,  2,  5],
-        #                   [2,  5,  6],
-        #                   [3,  7,  4],
-        #                   [7,  8,  4]])
-
-        # obj_centers = []
-        # colors = []
-        # sizes = []
-        # faces = []
-        # start_id  = point_cloud.shape[1]
-        # for obj_id in range(box_label_mask.shape[0]):
-        #     if box_label_mask[obj_id] == 1:
-        #         size = size_residual_label[obj_id] + np.array([0.4, 0.4, 0.4])
-        #         obj_center = center_label[obj_id]
-        #         corners = grid * 0.5 * size[np.newaxis, :] + obj_center[np.newaxis, :]
-
-        #         faces.append(face_ids + start_id)
-        #         start_id += 8
-
-
-        #         obj_centers.append(corners[np.newaxis, :])
-        #         colors.append(np.array([[[255, 0, 0]]]))
-
-        # point_cloud_merged = np.concatenate([point_cloud]+obj_center, axis=1)
-        # colors_merged = np.concatenate([np.zeros_like(point_cloud) ]+colors, axis=1)
-        # faces_merged = np.concatenate(faces, axis=0)[np.newaxis, :, :]
-        # self.writer.add_mesh("input point cloud", vertices=point_cloud_merged, colors=colors_merged, faces=faces)
-        # self.writer.add_image("input rgb image", data["rgb_image"][0, :, :, :].permute(2, 0, 1))
         '''network forwarding'''
         est_data = self.net(data)
 
 
         #self.writer()
 
-        import ipdb; ipdb.set_trace()
-
         '''computer losses'''
         loss = self.net.module.loss(est_data, data)
+
+
         return loss

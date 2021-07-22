@@ -1,4 +1,5 @@
 method: ISCNet
+runname: detector_iscnet
 resume: False
 finetune: False
 weight: []

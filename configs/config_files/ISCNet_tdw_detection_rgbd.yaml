@@ -1,12 +1,12 @@
 method: ISCNet
-runname: detector_only2
+runname: detector_only
 resume: False
 finetune: False
 weight: []
 seed: 10
 device:
   use_gpu: True
-  gpu_ids: '0,1,2,3,4,5,6,7,8,9'
+  gpu_ids: '0,1'
   num_workers: 0
 data:
   dataset: tdw_physics
@@ -70,7 +70,7 @@ train:
   batch_size: 4
 val:
   phase: 'detection'
-  batch_size: 4
+  batch_size: 8
   use_cls_nms: True
   use_3d_nms: True
   ap_iou_thresholds: [0.25, 0.5]

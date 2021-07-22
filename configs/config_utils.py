@@ -42,6 +42,7 @@ class CONFIG(object):
 
         # update visualization path
         vis_path = os.path.join(self._save_path, self.config['log']['vis_path'])
+
         if not os.path.exists(vis_path):
             os.mkdir(vis_path)
         self.update_config(log={'vis_path': vis_path})
@@ -59,7 +60,7 @@ class CONFIG(object):
 
     def load_logger(self):
         # set file handler
-        save_path = os.path.join(self.config['log']['path'], datetime.now().isoformat())
+        save_path = os.path.join(self.config['log']['path'], self.config["runname"])
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 

@@ -22,14 +22,14 @@ class TdwPhysicsConfig(object):
         self.data_path = 'datasets/scannet/processed_data'
         #for i in range(self.num_size_cluster):
         #    self.type_mean_size[self.class2type[i]] = self.mean_size_arr[i, :]
-
+        self.with_rotation = False
     def size2class(self, size, type_name):
         ''' Convert 3D box size (l,w,h) to size class and size residual '''
         size_class = self.type2class[type_name]
         size_residual = size - self.type_mean_size[type_name]
         return size_class, size_residual
 
-    def class2size(self, residual):
+    def class2size(self, tmp, residual):
         ''' Inverse function to size2class '''
         return self.mean_size_arr + residual
 
