@@ -8,6 +8,7 @@ import os
 from net_utils import visualization as vis
 from net_utils.ap_helper import parse_predictions, parse_groundtruths
 
+
 class Trainer(BaseTrainer):
     '''
     Trainer object for total3d.
@@ -38,7 +39,7 @@ class Trainer(BaseTrainer):
         box_label_mask = data["box_label_mask"][0].cpu().numpy()
         center_label = data["center_label"][0].cpu().numpy()
         size_residual_label = data["size_residual_label"][0].cpu().numpy()
-        rgb_image = data["rgb_image"][0].cpu().numpy()
+        #rgb_image = data["rgb_image"][0].cpu().numpy()
 
         mat = np.array([[1, 0, 0],
                   [0, 0, 1],
@@ -74,6 +75,7 @@ class Trainer(BaseTrainer):
 
         sample_ids = np.random.choice(voxels_out.shape[0], 3, replace=False) if voxels_out.shape[0]>=3 else range(voxels_out.shape[0])
         n_shapes_per_batch = self.cfg.config['data']['completion_limit_in_train']
+
         for idx, i in enumerate(sample_ids):
             voxel_path = os.path.join(self.cfg.config['log']['vis_path'], '%s_%s_%s_%03d_pred.png' % (epoch, phase, iter, idx))
             vis.visualize_voxels(voxels_out[i].cpu().numpy(), voxel_path)
@@ -83,14 +85,20 @@ class Trainer(BaseTrainer):
             box_id = proposal_to_gt_box_w_cls_list[batch_index][in_batch_id][1].item()
             cls_id = proposal_to_gt_box_w_cls_list[batch_index][in_batch_id][2].item()
 
-            voxels_gt = data['object_voxels'][batch_index][box_id].cpu().numpy()
-            voxel_path = os.path.join(self.cfg.config['log']['vis_path'], '%s_%s_%s_%03d_gt_cls%d.png' % (epoch, phase, iter, idx, cls_id))
-            vis.visualize_voxels(voxels_gt, voxel_path)
+
+            if 'object_voxels' in data:
+                voxels_gt = data['object_voxels'][batch_index][box_id].cpu().numpy()
+                voxel_path = os.path.join(self.cfg.config['log']['vis_path'], '%s_%s_%s_%03d_gt_cls%d.png' % (epoch, phase, iter, idx, cls_id))
+                vis.visualize_voxels(voxels_gt, voxel_path)
+            else: # visualize mesh
+                normalized_mesh = data["object_normalized_meshes"][batch_index][box_id]
+                out_path = os.path.join(self.cfg.config['log']['vis_path'], '%s_%s_%s_%03d_gt.png' % (epoch, phase, iter, idx))
+                vis.visualize_mesh(normalized_mesh.vertices, normalized_mesh.faces, out_file=out_path)
 
     def to_device(self, data):
         device = self.device
         for key in data:
-            if key not in ['object_voxels', 'shapenet_catids', 'shapenet_ids']:
+            if key not in ['object_voxels', 'shapenet_catids', 'shapenet_ids', 'object_normalized_meshes']:
                 data[key] = data[key].to(device)
         return data
 

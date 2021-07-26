@@ -112,6 +112,7 @@ class ISCNet(BaseNetwork):
                     pred_centers = torch.gather(end_points['center'], 1, gather_ids)
 
                     # gather proposal orientations
+                    #cfg.config["model"]["detection"]["object_agnostic"]
                     pred_heading_class = torch.argmax(end_points['heading_scores'], -1)  # B,num_proposal
                     heading_residuals = end_points['heading_residuals_normalized'] * (np.pi / self.cfg.eval_config['dataset_config'].num_heading_bin)  # Bxnum_proposalxnum_heading_bin
                     pred_heading_residual = torch.gather(heading_residuals, 2, pred_heading_class.unsqueeze(-1))  # B,num_proposal,1
@@ -349,13 +350,17 @@ class ISCNet(BaseNetwork):
                 pred_centers = torch.gather(end_points['center'], 1, gather_ids)
 
                 # gather proposal orientations
-                pred_heading_class = torch.argmax(end_points['heading_scores'], -1)  # B,num_proposal
-                heading_residuals = end_points['heading_residuals_normalized'] * (np.pi / self.cfg.eval_config['dataset_config'].num_heading_bin)  # Bxnum_proposalxnum_heading_bin
-                pred_heading_residual = torch.gather(heading_residuals, 2, pred_heading_class.unsqueeze(-1))  # B,num_proposal,1
-                pred_heading_residual.squeeze_(2)
-                heading_angles = self.cfg.eval_config['dataset_config'].class2angle_cuda(pred_heading_class, pred_heading_residual)
-                heading_angles = torch.gather(heading_angles, 1, BATCH_PROPOSAL_IDs[...,0])
+                if not self.cfg.config["model"]["detection"]["object_agnostic"]:
+                    pred_heading_class = torch.argmax(end_points['heading_scores'], -1)  # B,num_proposal
+                    heading_residuals = end_points['heading_residuals_normalized'] * (np.pi / self.cfg.eval_config['dataset_config'].num_heading_bin)  # Bxnum_proposalxnum_heading_bin
+                    pred_heading_residual = torch.gather(heading_residuals, 2, pred_heading_class.unsqueeze(-1))  # B,num_proposal,1
+                    pred_heading_residual.squeeze_(2)
 
+                    heading_angles = self.cfg.eval_config['dataset_config'].class2angle_cuda(pred_heading_class, pred_heading_residual)
+                    heading_angles = torch.gather(heading_angles, 1, BATCH_PROPOSAL_IDs[...,0])
+                else:
+                    batch_size, nobjects, _ = pred_centers.shape
+                    heading_angles = torch.zeros((batch_size, nobjects)).to(features.device)
                 # gather instance labels
                 proposal_instance_labels = torch.gather(data['object_instance_labels'], 1, BATCH_PROPOSAL_IDs[...,1])
 

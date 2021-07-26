@@ -40,11 +40,11 @@ if (OPENMP_FOUND)
 endif()
 
 find_package(CUDA 6.5 REQUIRED)
-set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-std=c++11")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS};-std=c++11 ")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_FORCE_INLINES -Wall")
 
-set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}; -gencode=arch=compute_30,code=sm_30")
-set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}; -gencode=arch=compute_30,code=compute_30")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}; -gencode=arch=compute_50,code=sm_50")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS}; -gencode=arch=compute_50,code=compute_50")
 
 set(FUSION_CPU_SRC
   fusion.cpp

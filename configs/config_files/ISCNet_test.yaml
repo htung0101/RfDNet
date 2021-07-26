@@ -1,4 +1,5 @@
 method: ISCNet
+runname: "test"
 resume: False
 finetune: True
 weight: ['out/pretrained_models/pretrained_weight.pth']
@@ -36,6 +37,7 @@ model:
     method: VotingModule
     loss: Null
   detection:
+    object_agnostic: False
     method: ProposalModule
     loss: DetectionLoss
   skip_propagation:

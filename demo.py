@@ -326,6 +326,7 @@ def generate(cfg, net, data, post_processing):
 
         meshes = net.completion.generator.generate_mesh(object_input_features, cls_codes_for_completion)
 
+
     if post_processing:
         pred_mesh_dict = {'meshes': meshes, 'proposal_ids': BATCH_PROPOSAL_IDs}
         parsed_predictions = fit_mesh_to_scan(cfg, pred_mesh_dict, parsed_predictions, eval_dict, inputs['point_clouds'], dump_threshold)
@@ -410,9 +411,10 @@ def visualize(output_dir, offline):
 
         print(sizes)
 
-        obj_points = obj_points - (obj_points.max(0) + obj_points.min(0))/2.
-        obj_points = obj_points.dot(transform_m.T)
-        obj_points = obj_points.dot(np.diag(1/(obj_points.max(0) - obj_points.min(0)))).dot(np.diag(sizes))
+        obj_points = obj_points - (obj_points.max(0) + obj_points.min(0))/2. #center the mesh
+        obj_points = obj_points.dot(transform_m.T) # transform to world coord
+
+        obj_points = obj_points.dot(np.diag(1/(obj_points.max(0) - obj_points.min(0)))).dot(np.diag(sizes)) #scale the model to have 1x1x1 bbox, then scale it up with box_params
 
         axis_rectified = np.array([[np.cos(orientation), np.sin(orientation), 0], [-np.sin(orientation), np.cos(orientation), 0], [0, 0, 1]])
         obj_points = obj_points.dot(axis_rectified) + center
@@ -459,7 +461,7 @@ def run(cfg):
 
     '''Load data'''
     cfg.log_string('Loading data.')
-    input_data = load_demo_data2(cfg, device)
+    input_data = load_demo_data(cfg, device)
 
     '''Run demo'''
     net.train(cfg.config['mode'] == 'train')

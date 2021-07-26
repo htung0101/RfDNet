@@ -2,6 +2,7 @@
 # author: ynie
 # date: Feb, 2020
 # Cite: VoteNet
+import copy
 import torch.utils.data
 from torch.utils.data import DataLoader
 from net_utils.libs import random_sampling_by_instance, rotz, flip_axis_to_camera
@@ -14,6 +15,7 @@ from utils import pc_util
 from utils.scannet.tools import get_box_corners
 from net_utils.transforms import SubsamplePoints
 from external import binvox_rw
+from external.libmesh import check_mesh_contains
 import pickle
 import trimesh
 from scipy.spatial.transform import Rotation as R
@@ -36,7 +38,7 @@ class ISCNet_ScanNet(ScanNet):
         self.n_points_object = cfg.config['data']['points_subsample']
         self.points_transform = SubsamplePoints(cfg.config['data']['points_subsample'], mode)
         self.phase = cfg.config[self.mode]['phase']
-        self.visualization = 0
+        self.visualization = 1
 
     def __getitem__(self, idx):
         """
@@ -66,8 +68,8 @@ class ISCNet_ScanNet(ScanNet):
             object_instance_ids.append(item['instance_id'])
             boxes3D.append(item['box3D'])
             classes.append(item['cls_id'])
-            shapenet_catids.append("03211117") #item['shapenet_catid'])
-            shapenet_ids.append("1a9e1fb2a51ffd065b07a27512172330") #item['shapenet_id'])
+            shapenet_catids.append(item['shapenet_catid'])
+            shapenet_ids.append(item['shapenet_id'])
 
 
         boxes3D = np.array(boxes3D)
@@ -178,21 +180,7 @@ class ISCNet_ScanNet(ScanNet):
 
 
 
-        if self.visualization:
-            axis = trimesh.creation.axis(axis_length=1)
 
-            vote_label = (point_cloud[:,:3] + point_votes[:,:3])[point_votes_mask > 0]
-            n_vote_label = vote_label.shape[0]
-
-            world_colors = np.repeat(np.array([[0,0,0,0.5]]), point_cloud.shape[0] + target_bboxes.shape[0] + n_vote_label, axis=0)
-
-            world_colors[point_cloud.shape[0]:  point_cloud.shape[0] + target_bboxes.shape[0], :] = np.array([[0,1,0,0.5]])
-            world_colors[point_cloud.shape[0] + target_bboxes.shape[0]:] = np.array([[1,0,0,0.5]])
-
-            pcds = trimesh.PointCloud(np.concatenate([point_cloud[:,:3], target_bboxes[:,:3], vote_label[:,:3]], axis=0), world_colors)
-            (trimesh.Scene(pcds) + axis).show()
-
-            import ipdb; ipdb.set_trace()
 
 
         '''For Object Completion'''
@@ -209,6 +197,7 @@ class ISCNet_ScanNet(ScanNet):
             object_points = np.zeros((MAX_NUM_OBJ, np.sum(self.n_points_object), 3))
             object_points_occ = np.zeros((MAX_NUM_OBJ, np.sum(self.n_points_object)))
             points_data = self.get_shapenet_points(shapenet_catids, shapenet_ids, transform=self.points_transform)
+
             object_points[0:boxes3D.shape[0]] = points_data['points']
             object_points_occ[0:boxes3D.shape[0]] = points_data['occ']
 
@@ -218,10 +207,22 @@ class ISCNet_ScanNet(ScanNet):
             ret_dict['point_instance_labels'] = point_instance_labels.astype(np.float32)
 
             '''Get Voxels for Visualization'''
-            voxels_data = self.get_shapenet_voxels(shapenet_catids, shapenet_ids)
-            object_voxels = np.zeros((MAX_NUM_OBJ, *voxels_data.shape[1:]))
-            object_voxels[0:boxes3D.shape[0]] = voxels_data
-            ret_dict['object_voxels'] = object_voxels.astype(np.float32)
+            #voxels_data = self.get_shapenet_voxels(shapenet_catids, shapenet_ids)
+            #object_voxels = np.zeros((MAX_NUM_OBJ, *voxels_data.shape[1:]))
+            #object_voxels[0:boxes3D.shape[0]] = voxels_data
+            #ret_dict['object_voxels'] = object_voxels.astype(np.float32)
+
+            # from net_utils import visualization as vis
+            # vis.visualize_voxels(ret_dict['object_voxels'][0], "0.png")
+
+            # for object_id in range(10):
+            #     pts = object_points[object_id][object_points_occ[object_id] > 0]
+            #     print(np.max(pts, axis=0) - np.min(pts, axis=0))
+            # import ipdb; ipdb.set_trace()
+
+            # axis = trimesh.creation.axis(axis_length=1)
+            # pcds = trimesh.PointCloud(pts)
+            # (trimesh.Scene(pcds) + axis).show()
 
             if self.mode in ['test']:
                 points_iou_data = self.get_shapenet_points(shapenet_catids, shapenet_ids, transform=None)
@@ -236,8 +237,82 @@ class ISCNet_ScanNet(ScanNet):
                 ret_dict['object_points_iou_occ'] = object_points_iou_occ.astype(np.float32)
                 ret_dict['shapenet_catids'] = shapenet_catids
                 ret_dict['shapenet_ids'] = shapenet_ids
-        return ret_dict
 
+        if self.visualization:
+
+            transform_m = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
+            for obj_id in range(7,8):
+                points = points_data["points"][obj_id]
+                occ = points_data["occ"][obj_id]
+                orientation = boxes3D[obj_id, 6]
+                occ_points = points[occ > 0, :]
+                print(occ_points.max(0), occ_points.min(0))
+                axis_rectified = np.array([[np.cos(orientation), np.sin(orientation), 0], [-np.sin(orientation), np.cos(orientation), 0], [0, 0, 1]])
+
+
+                obj_center =  target_bboxes[obj_id,:3]
+                obj_boxsize = target_bboxes[obj_id, 3:6]
+                occ_points = occ_points.dot(transform_m.T)
+                print("point boundary", points.max(0) - points.min(0))
+                print("occ point boundary", (occ_points.max(0) - occ_points.min(0)))
+                obj_points = (occ_points.dot(np.diag(1/(occ_points.max(0) - occ_points.min(0)))).dot(np.diag(obj_boxsize))).dot(axis_rectified) + obj_center
+                #+ np.array([0,0,3])
+                obj_points = np.concatenate([obj_points, obj_points + np.array([0,0,3])], axis=0)
+
+
+            axis = trimesh.creation.axis(axis_length=1)
+
+            vote_label = (point_cloud[:,:3] + point_votes[:,:3])[point_votes_mask > 0]
+            n_vote_label = vote_label.shape[0]
+
+            world_colors = np.repeat(np.array([[0,0,0,0.5]]), point_cloud.shape[0] + target_bboxes.shape[0] + n_vote_label + obj_points.shape[0], axis=0)
+
+            world_colors[point_cloud.shape[0]:  point_cloud.shape[0] + target_bboxes.shape[0], :] = np.array([[0,1,0,0.5]])
+            world_colors[point_cloud.shape[0] + target_bboxes.shape[0]:] = np.array([[1,0,0,0.5]])
+            world_colors[point_cloud.shape[0] + target_bboxes.shape[0] + n_vote_label :] = np.array([[1,1,0,0.5]])
+
+            pcds = trimesh.PointCloud(np.concatenate([point_cloud[:,:3], target_bboxes[:,:3], vote_label[:,:3], obj_points], axis=0), world_colors)
+            (trimesh.Scene(pcds) + axis).show()
+
+            import ipdb; ipdb.set_trace()
+
+
+        return ret_dict
+    def get_shapenet_voxels(self, shapenet_catids, shapenet_ids):
+        '''Load object voxels.'''
+        shape_data_list = []
+        for shapenet_catid, shapenet_id in zip(shapenet_catids, shapenet_ids):
+            voxel_file = os.path.join(self.shapenet_path, 'voxel/16', shapenet_catid, shapenet_id + '.binvox')
+            with open(voxel_file, 'rb') as f:
+                voxels = binvox_rw.read_as_3d_array(f)
+            voxels = voxels.data.astype(np.float32)
+            shape_data_list.append(voxels[np.newaxis])
+        return np.concatenate(shape_data_list, axis=0)
+
+    def get_shapenet_points(self, shapenet_catids, shapenet_ids, transform=None):
+        '''Load points and corresponding occ values.'''
+        shape_data_list = []
+
+        for shapenet_catid, shapenet_id in zip(shapenet_catids, shapenet_ids):
+            points_dict = np.load(os.path.join(self.shapenet_path, 'point', shapenet_catid, shapenet_id + '.npz'))
+
+            points = points_dict['points']
+            # Break symmetry if given in float16:
+            if points.dtype == np.float16 and self.mode == 'train':
+                points = points.astype(np.float32)
+                points += 1e-4 * np.random.randn(*points.shape)
+            else:
+                points = points.astype(np.float32)
+            occupancies = points_dict['occupancies']
+            if self.points_unpackbits:
+                occupancies = np.unpackbits(occupancies)[:points.shape[0]]
+            occupancies = occupancies.astype(np.float32)
+            data = {'points':points, 'occ': occupancies}
+            if transform is not None:
+                data = transform(data)
+            shape_data_list.append(data)
+
+        return recursive_cat_to_numpy(shape_data_list)
 class ISCNet_TdwPhysics(ScanNet):
     def __init__(self, cfg, mode):
         super(ISCNet_TdwPhysics, self).__init__(cfg, mode)
@@ -324,6 +399,19 @@ class ISCNet_TdwPhysics(ScanNet):
 
 
         nobjects = len(phases_dict["vertices_faces"])
+
+        if nobjects != obj_positions.shape[0]:
+
+            # remove bad object
+            vf = []
+            for object_id in range(nobjects):
+
+                if np.min(np.max(abs(phases_dict["vertices_faces"][object_id][0]), axis=0)) < 0.001:
+                    continue
+                else:
+                    vf.append(phases_dict["vertices_faces"][object_id])
+            phases_dict["vertices_faces"] = vf
+            nobjects = len(phases_dict["vertices_faces"])
         assert(nobjects == obj_positions.shape[0])
 
 
@@ -332,6 +420,7 @@ class ISCNet_TdwPhysics(ScanNet):
 
         object_instance_ids = []
         meshes = []
+        normalized_meshes = []
         for object_id in range(nobjects):
             object_instance_ids.append(object_id)
             vertices, faces = phases_dict["vertices_faces"][object_id]
@@ -348,6 +437,15 @@ class ISCNet_TdwPhysics(ScanNet):
             box3D[:3] = (min_bound + max_bound)/2
             box3D[3:6] = max_bound - min_bound
 
+            bbox = mesh.bounding_box.bounds
+            loc = (bbox[0] + bbox[1]) / 2
+            scale = (bbox[1] - bbox[0]).max()
+            normalized_mesh = copy.deepcopy(mesh)
+            normalized_mesh.apply_translation(-loc)
+            normalized_mesh.apply_scale(1 / scale)
+
+            normalized_meshes.append(normalized_mesh)
+
             boxes3D.append(box3D)
             classes.append(0)
 
@@ -356,6 +454,10 @@ class ISCNet_TdwPhysics(ScanNet):
 
         pts_cam = utils_geom.depth2pointcloud(depth[np.newaxis, np.newaxis, :, :], pix_T_cam[np.newaxis, :, :])
         pts_world = utils_geom.apply_4x4(world_T_cam[np.newaxis, :, :], pts_cam)[0]
+
+        if self.use_color:
+            pts_world = np.concatenate([pts_world, image.reshape([-1, 3])], axis=1)
+
         indices = (abs(pts_world[:,0]) < 10) & (abs(pts_world[:,1]) < 10) & (abs(pts_world[:,2]) < 10)
 
 
@@ -369,9 +471,9 @@ class ISCNet_TdwPhysics(ScanNet):
 
             #if object_id > 0:
             point_votes[point_cloud_ids == object_id, 0] = 1
-            point_votes[point_cloud_ids == object_id, 1:4] = object_center - point_cloud[point_cloud_ids == object_id]
-            point_votes[point_cloud_ids == object_id, 4:7] = object_center - point_cloud[point_cloud_ids == object_id]
-            point_votes[point_cloud_ids == object_id, 7:10] = object_center - point_cloud[point_cloud_ids == object_id]
+            point_votes[point_cloud_ids == object_id, 1:4] = object_center - point_cloud[point_cloud_ids == object_id][:,:3]
+            point_votes[point_cloud_ids == object_id, 4:7] = object_center - point_cloud[point_cloud_ids == object_id][:,:3]
+            point_votes[point_cloud_ids == object_id, 7:10] = object_center - point_cloud[point_cloud_ids == object_id][:,:3]
 
 
         point_instance_labels = point_cloud_ids
@@ -518,20 +620,63 @@ class ISCNet_TdwPhysics(ScanNet):
 
             object_points = np.zeros((self.MAX_NUM_OBJ, np.sum(self.n_points_object), 3))
             object_points_occ = np.zeros((self.MAX_NUM_OBJ, np.sum(self.n_points_object)))
-            points_data = self.get_shapenet_points(shapenet_catids, shapenet_ids, transform=self.points_transform)
+            #points_data = self.get_shapenet_points(shapenet_catids, shapenet_ids, transform=self.points_transform)
+            shape_data_list = []
+            for object_id in range(nobjects):
+                mesh = normalized_meshes[object_id]
+                # get meshes
+                self.points_size = 100000
+                self.points_uniform_ratio = 0.5
+                self.points_padding = 0.1
+                self.points_sigma = 0.01
+                n_points_uniform = int(self.points_size * self.points_uniform_ratio)
+                n_points_surface = self.points_size - n_points_uniform
+
+
+                extents = mesh.bounds
+
+                boxsize = extents[1, :] - extents[0,:]
+                center = (extents[1, :] + extents[0,:])/2
+                boxsize = np.maximum(boxsize, 1) + self.points_padding
+                points_uniform = np.random.rand(n_points_uniform, 3)
+                points_uniform = boxsize * (points_uniform - 0.5) + center
+
+                points_surface = mesh.sample(n_points_surface)
+                points_surface += self.points_sigma * np.random.randn(n_points_surface, 3)
+                points = np.concatenate([points_uniform, points_surface], axis=0)
+
+                occupancies = check_mesh_contains(mesh, points)
+                occupancies = occupancies.astype(np.float32)
+
+                # add some noise
+                if points.dtype == np.float16 and self.mode == 'train':
+                    points = points.astype(np.float32)
+                    points += 1e-4 * np.random.randn(*points.shape)
+                else:
+                    points = points.astype(np.float32)
+
+                data = {'points':points, 'occ': occupancies}
+                data = self.points_transform(data)
+                shape_data_list.append(data)
+            points_data = recursive_cat_to_numpy(shape_data_list)
+
+
+
             object_points[0:boxes3D.shape[0]] = points_data['points']
             object_points_occ[0:boxes3D.shape[0]] = points_data['occ']
+
 
             ret_dict['object_points'] = object_points.astype(np.float32)
             ret_dict['object_points_occ'] = object_points_occ.astype(np.float32)
             ret_dict['object_instance_labels'] = object_instance_labels.astype(np.float32)
             ret_dict['point_instance_labels'] = point_instance_labels.astype(np.float32)
 
+            #import ipdb; ipdb.set_trace()
             '''Get Voxels for Visualization'''
-            voxels_data = self.get_shapenet_voxels(shapenet_catids, shapenet_ids)
-            object_voxels = np.zeros((self.MAX_NUM_OBJ, *voxels_data.shape[1:]))
-            object_voxels[0:boxes3D.shape[0]] = voxels_data
-            ret_dict['object_voxels'] = object_voxels.astype(np.float32)
+            #voxels_data = self.get_shapenet_voxels(shapenet_catids, shapenet_ids)
+            #object_voxels = np.zeros((self.MAX_NUM_OBJ, *voxels_data.shape[1:]))
+            # object_voxels[0:boxes3D.shape[0]] = voxels_data
+            ret_dict['object_normalized_meshes'] = normalized_meshes
 
             if self.mode in ['test']:
                 points_iou_data = self.get_shapenet_points(shapenet_catids, shapenet_ids, transform=None)
@@ -548,42 +693,6 @@ class ISCNet_TdwPhysics(ScanNet):
                 ret_dict['shapenet_ids'] = shapenet_ids
         return ret_dict
 
-
-
-    def get_shapenet_voxels(self, shapenet_catids, shapenet_ids):
-        '''Load object voxels.'''
-        shape_data_list = []
-        for shapenet_catid, shapenet_id in zip(shapenet_catids, shapenet_ids):
-            voxel_file = os.path.join(self.shapenet_path, 'voxel/16', shapenet_catid, shapenet_id + '.binvox')
-            with open(voxel_file, 'rb') as f:
-                voxels = binvox_rw.read_as_3d_array(f)
-            voxels = voxels.data.astype(np.float32)
-            shape_data_list.append(voxels[np.newaxis])
-        return np.concatenate(shape_data_list, axis=0)
-
-    def get_shapenet_points(self, shapenet_catids, shapenet_ids, transform=None):
-        '''Load points and corresponding occ values.'''
-        shape_data_list = []
-
-        for shapenet_catid, shapenet_id in zip(shapenet_catids, shapenet_ids):
-            points_dict = np.load(os.path.join(self.shapenet_path, 'point', shapenet_catid, shapenet_id + '.npz'))
-            points = points_dict['points']
-            # Break symmetry if given in float16:
-            if points.dtype == np.float16 and self.mode == 'train':
-                points = points.astype(np.float32)
-                points += 1e-4 * np.random.randn(*points.shape)
-            else:
-                points = points.astype(np.float32)
-            occupancies = points_dict['occupancies']
-            if self.points_unpackbits:
-                occupancies = np.unpackbits(occupancies)[:points.shape[0]]
-            occupancies = occupancies.astype(np.float32)
-            data = {'points':points, 'occ': occupancies}
-            if transform is not None:
-                data = transform(data)
-            shape_data_list.append(data)
-
-        return recursive_cat_to_numpy(shape_data_list)
 
 def recursive_cat_to_numpy(data_list):
     '''Covert a list of dict to dict of numpy arrays.'''
@@ -607,7 +716,7 @@ def collate_fn(batch):
     '''
     collated_batch = {}
     for key in batch[0]:
-        if key not in ['shapenet_catids', 'shapenet_ids']:
+        if key not in ['shapenet_catids', 'shapenet_ids', 'object_normalized_meshes']:
             collated_batch[key] = default_collate([elem[key] for elem in batch])
         else:
             collated_batch[key] = [elem[key] for elem in batch]

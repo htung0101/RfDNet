@@ -10,7 +10,7 @@ device:
   num_workers: 0
 data:
   dataset: tdw_physics
-  split: data_with_depth/dominoes #potentially can be a list
+  split: data_with_depth_small/dominoes #potentially can be a list
   num_point: 50000
   num_target: 256
   vote_factor: 1

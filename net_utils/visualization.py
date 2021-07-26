@@ -70,6 +70,36 @@ def visualize_pointcloud(points, normals=None,
     plt.close(fig)
 
 
+def visualize_mesh(points, faces,
+                         out_file=None, show=False):
+    '''
+    Visualizes point cloud data.
+    :param points (tensor): point data
+    :param normals (tensor): normal data (if existing)
+    :param out_file (string): output file
+    :param show (bool): whether the plot should be shown
+    :return:
+    '''
+    # Use numpy
+    points = np.asarray(points)
+    # Create plot
+    fig = plt.figure()
+    ax = fig.gca(projection=Axes3D.name)
+    ax.plot_trisurf(points[:, 0], points[:, 1], points[:, 2], triangles=faces)
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_xlim(-0.5, 0.5)
+    ax.set_ylim(-0.5, 0.5)
+    ax.set_zlim(-0.5, 0.5)
+    ax.view_init(elev=30, azim=225)
+    if out_file is not None:
+        plt.savefig(out_file)
+    if show:
+        plt.show()
+    plt.close(fig)
+
 
 def visualize_pointcloud_boxes(points, bboxes, box_label_mask=None, normals=None,
                          out_file=None, show=False):
