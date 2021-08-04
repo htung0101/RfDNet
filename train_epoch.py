@@ -44,7 +44,7 @@ def train_epoch(cfg, epoch, train_iter, trainer, dataloaders):
             loss_recorder.update_loss(loss)
 
             if ((iter + 1) % cfg.config['log']['print_step']) == 0: #10
-                cfg.log_string('Process: Phase: %s. Epoch %d: %d (%d) /%d. Current loss: %s.' % (phase, epoch, iter + 1, train_iter, len(dataloader), str(loss)))
+                cfg.log_string('Process %s: Phase: %s. Epoch %d: %d (%d) /%d. Current loss: %s.' % (cfg.config['runname'], phase, epoch, iter + 1, train_iter, len(dataloader), str(loss)))
                 log_board.update(loss, cfg.config['log']['print_step'], phase)
 
         cfg.log_string('=' * 100)

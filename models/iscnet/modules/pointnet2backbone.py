@@ -94,24 +94,24 @@ class Pointnet2Backbone(nn.Module):
         if not end_points: end_points = {}
 
         xyz, features = self._break_up_pc(pointcloud)
-
         # --------- 4 SET ABSTRACTION LAYERS ---------
-        xyz, features, fps_inds = self.sa1(xyz, features)
+        # select 2048 points from 50000
+        xyz, features, fps_inds, _ = self.sa1(xyz, features)
         # xyz are the farthest points from the input points, inds are the corresponding index
         end_points['sa1_inds'] = fps_inds
         end_points['sa1_xyz'] = xyz
         end_points['sa1_features'] = features
 
-        xyz, features, fps_inds = self.sa2(xyz, features)  # this fps_inds is just 0,1,...,1023
+        xyz, features, fps_inds, _ = self.sa2(xyz, features)  # this fps_inds is just 0,1,...,1023
         end_points['sa2_inds'] = fps_inds
         end_points['sa2_xyz'] = xyz
         end_points['sa2_features'] = features
 
-        xyz, features, fps_inds = self.sa3(xyz, features)  # this fps_inds is just 0,1,...,511
+        xyz, features, fps_inds, _ = self.sa3(xyz, features)  # this fps_inds is just 0,1,...,511
         end_points['sa3_xyz'] = xyz
         end_points['sa3_features'] = features
 
-        xyz, features, fps_inds = self.sa4(xyz, features)  # this fps_inds is just 0,1,...,255
+        xyz, features, fps_inds, _ = self.sa4(xyz, features)  # this fps_inds is just 0,1,...,255
         end_points['sa4_xyz'] = xyz
         end_points['sa4_features'] = features
 

@@ -31,6 +31,7 @@ class ISCNet_ScanNet(ScanNet):
         super(ISCNet_ScanNet, self).__init__(cfg, mode)
         self.num_points = cfg.config['data']['num_point']
         self.use_color = cfg.config['data']['use_color_detection'] or cfg.config['data']['use_color_completion']
+
         self.use_height = not cfg.config['data']['no_height']
         self.augment = mode == 'train'
         self.shapenet_path = os.path.join(data_root, cfg.config['data']['shapenet_path'])
@@ -239,25 +240,25 @@ class ISCNet_ScanNet(ScanNet):
                 ret_dict['shapenet_ids'] = shapenet_ids
 
         if self.visualization:
+            if self.phase == 'completion':
+                transform_m = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
+                for obj_id in range(7,8):
+                    points = points_data["points"][obj_id]
+                    occ = points_data["occ"][obj_id]
+                    orientation = boxes3D[obj_id, 6]
+                    occ_points = points[occ > 0, :]
+                    print(occ_points.max(0), occ_points.min(0))
+                    axis_rectified = np.array([[np.cos(orientation), np.sin(orientation), 0], [-np.sin(orientation), np.cos(orientation), 0], [0, 0, 1]])
 
-            transform_m = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
-            for obj_id in range(7,8):
-                points = points_data["points"][obj_id]
-                occ = points_data["occ"][obj_id]
-                orientation = boxes3D[obj_id, 6]
-                occ_points = points[occ > 0, :]
-                print(occ_points.max(0), occ_points.min(0))
-                axis_rectified = np.array([[np.cos(orientation), np.sin(orientation), 0], [-np.sin(orientation), np.cos(orientation), 0], [0, 0, 1]])
 
-
-                obj_center =  target_bboxes[obj_id,:3]
-                obj_boxsize = target_bboxes[obj_id, 3:6]
-                occ_points = occ_points.dot(transform_m.T)
-                print("point boundary", points.max(0) - points.min(0))
-                print("occ point boundary", (occ_points.max(0) - occ_points.min(0)))
-                obj_points = (occ_points.dot(np.diag(1/(occ_points.max(0) - occ_points.min(0)))).dot(np.diag(obj_boxsize))).dot(axis_rectified) + obj_center
-                #+ np.array([0,0,3])
-                obj_points = np.concatenate([obj_points, obj_points + np.array([0,0,3])], axis=0)
+                    obj_center =  target_bboxes[obj_id,:3]
+                    obj_boxsize = target_bboxes[obj_id, 3:6]
+                    occ_points = occ_points.dot(transform_m.T)
+                    print("point boundary", points.max(0) - points.min(0))
+                    print("occ point boundary", (occ_points.max(0) - occ_points.min(0)))
+                    obj_points = (occ_points.dot(np.diag(1/(occ_points.max(0) - occ_points.min(0)))).dot(np.diag(obj_boxsize))).dot(axis_rectified) + obj_center
+                    #+ np.array([0,0,3])
+                    obj_points = np.concatenate([obj_points, obj_points + np.array([0,0,3])], axis=0)
 
 
             axis = trimesh.creation.axis(axis_length=1)
@@ -265,13 +266,20 @@ class ISCNet_ScanNet(ScanNet):
             vote_label = (point_cloud[:,:3] + point_votes[:,:3])[point_votes_mask > 0]
             n_vote_label = vote_label.shape[0]
 
-            world_colors = np.repeat(np.array([[0,0,0,0.5]]), point_cloud.shape[0] + target_bboxes.shape[0] + n_vote_label + obj_points.shape[0], axis=0)
+            if self.phase == 'completion':
+                world_colors = np.repeat(np.array([[0,0,0,0.5]]), point_cloud.shape[0] + target_bboxes.shape[0] + n_vote_label + obj_points.shape[0], axis=0)
+            else:
+                world_colors = np.repeat(np.array([[0,0,0,0.5]]), point_cloud.shape[0] + target_bboxes.shape[0] + n_vote_label, axis=0)
+                idxs = np.where(point_votes_mask > 0)[0]
 
+                world_colors[idxs, :] =  np.array([1,0,0,0.5])
             world_colors[point_cloud.shape[0]:  point_cloud.shape[0] + target_bboxes.shape[0], :] = np.array([[0,1,0,0.5]])
             world_colors[point_cloud.shape[0] + target_bboxes.shape[0]:] = np.array([[1,0,0,0.5]])
             world_colors[point_cloud.shape[0] + target_bboxes.shape[0] + n_vote_label :] = np.array([[1,1,0,0.5]])
-
-            pcds = trimesh.PointCloud(np.concatenate([point_cloud[:,:3], target_bboxes[:,:3], vote_label[:,:3], obj_points], axis=0), world_colors)
+            if self.phase == 'completion':
+                pcds = trimesh.PointCloud(np.concatenate([point_cloud[:,:3], target_bboxes[:,:3], vote_label[:,:3], obj_points], axis=0), world_colors)
+            else:
+                pcds = trimesh.PointCloud(np.concatenate([point_cloud[:,:3], target_bboxes[:,:3], vote_label[:,:3]], axis=0), world_colors)
             (trimesh.Scene(pcds) + axis).show()
 
             import ipdb; ipdb.set_trace()
@@ -342,6 +350,9 @@ class ISCNet_TdwPhysics(ScanNet):
             [0.5, 0.5, 1, 1],
             [1, 1, 1, 1]])
 
+        self.fixed_timestep = None
+        if "fixed_timestep" in cfg.config['data']:
+            self.fixed_timestep = cfg.config['data']["fixed_timestep"]
     def __getitem__(self, idx):
         """
         Returns a dict with following keys:
@@ -378,7 +389,12 @@ class ISCNet_TdwPhysics(ScanNet):
 
         # because we want to sample also idx_timestep + 1
         time_step = phases_dict["time_step"]
-        idx_timestep = np.random.randint(time_step)
+
+        if self.fixed_timestep is None:
+            idx_timestep = np.random.randint(time_step)
+        else:
+            idx_timestep = self.fixed_timestep
+
 
 
         data_path = os.path.join(data_dir, str(idx_rollout), str(idx_timestep) + '.h5')
@@ -400,13 +416,16 @@ class ISCNet_TdwPhysics(ScanNet):
 
         nobjects = len(phases_dict["vertices_faces"])
 
+        missing_objects = []
         if nobjects != obj_positions.shape[0]:
 
             # remove bad object
             vf = []
+            missing_objects = []
             for object_id in range(nobjects):
 
                 if np.min(np.max(abs(phases_dict["vertices_faces"][object_id][0]), axis=0)) < 0.001:
+                    missing_objects.append(object_id)
                     continue
                 else:
                     vf.append(phases_dict["vertices_faces"][object_id])
@@ -421,6 +440,7 @@ class ISCNet_TdwPhysics(ScanNet):
         object_instance_ids = []
         meshes = []
         normalized_meshes = []
+        rot_trans = []
         for object_id in range(nobjects):
             object_instance_ids.append(object_id)
             vertices, faces = phases_dict["vertices_faces"][object_id]
@@ -428,6 +448,7 @@ class ISCNet_TdwPhysics(ScanNet):
 
             rot = R.from_quat(obj_rotations[object_id]).as_matrix()
             trans = obj_positions[object_id]
+            rot_trans.append((rot, trans))
             new_vertices = (np.matmul(rot, vertices.T) + np.expand_dims(trans, 1)).T[:, :3]
             mesh = trimesh.Trimesh(vertices=new_vertices, faces=faces)
             mesh.visual.face_colors = [200, 200, 250, 100] # for visualization
@@ -470,6 +491,20 @@ class ISCNet_TdwPhysics(ScanNet):
             object_center = boxes3D[object_id][:3]
 
             #if object_id > 0:
+            # add a correction for point outside the box (this is error in the semantic map from the simulator)
+            ids = np.where(point_cloud_ids == object_id)[0]
+
+            point_vote = abs(object_center - point_cloud[point_cloud_ids == object_id][:,:3])
+            box3D = boxes3D[object_id][3:6]
+            point_outside_box3D = (point_vote[:,0] > box3D[0]*0.5) | (point_vote[:,1] > box3D[1]*0.5) | (point_vote[:,2] > box3D[2] * 0.5)
+
+            delete_ids = ids[point_outside_box3D]
+
+            if delete_ids.shape[0] > 0:
+                # point_cloud_ids
+                point_cloud_ids[delete_ids] = -1
+
+
             point_votes[point_cloud_ids == object_id, 0] = 1
             point_votes[point_cloud_ids == object_id, 1:4] = object_center - point_cloud[point_cloud_ids == object_id][:,:3]
             point_votes[point_cloud_ids == object_id, 4:7] = object_center - point_cloud[point_cloud_ids == object_id][:,:3]
@@ -491,13 +526,11 @@ class ISCNet_TdwPhysics(ScanNet):
             print(pts_world.shape)
             import ipdb; ipdb.set_trace()
 
-
         if not self.use_color:
             point_cloud = point_cloud[:, 0:3]  # do not use color for now
         else:
             point_cloud = point_cloud[:, 0:6]
             point_cloud[:, 3:] = (point_cloud[:, 3:] - MEAN_COLOR_RGB) / 256.0
-
         if self.use_height:
             floor_height = np.percentile(point_cloud[:, 2], 0.99)
             height = point_cloud[:, 2] - floor_height
@@ -586,7 +619,6 @@ class ISCNet_TdwPhysics(ScanNet):
         """
         # mask out the flat mat
         #target_bboxes_mask[0] = 0
-
         ret_dict = {}
         ret_dict['point_clouds'] = point_cloud.astype(np.float32)
         ret_dict["rgb_image"] = image
@@ -603,9 +635,8 @@ class ISCNet_TdwPhysics(ScanNet):
         ret_dict['vote_label'] = point_votes.astype(np.float32)
         ret_dict['vote_label_mask'] = point_votes_mask.astype(np.int64)
         ret_dict['scan_idx'] = np.array(idx).astype(np.int64)
-
+        ret_dict['point_instance_labels'] = point_instance_labels.astype(np.float32)
         #print("center_label", ret_dict['center_label'][:10,:])
-
 
         '''For Object Completion'''
         if self.phase == 'completion':
@@ -621,39 +652,30 @@ class ISCNet_TdwPhysics(ScanNet):
             object_points = np.zeros((self.MAX_NUM_OBJ, np.sum(self.n_points_object), 3))
             object_points_occ = np.zeros((self.MAX_NUM_OBJ, np.sum(self.n_points_object)))
             #points_data = self.get_shapenet_points(shapenet_catids, shapenet_ids, transform=self.points_transform)
+
+            points_dir = trial_dir.replace("DPI-Net", "RfDNet")
+            points_dict = np.load(os.path.join(points_dir, 'points.npz'))
+            #points = points_dict['points']
+            obj_points = points_dict['points']
+            occs = points_dict["occupancies"]
+
             shape_data_list = []
             for object_id in range(nobjects):
-                mesh = normalized_meshes[object_id]
-                # get meshes
-                self.points_size = 100000
-                self.points_uniform_ratio = 0.5
-                self.points_padding = 0.1
-                self.points_sigma = 0.01
-                n_points_uniform = int(self.points_size * self.points_uniform_ratio)
-                n_points_surface = self.points_size - n_points_uniform
 
+                points = obj_points[object_id]
 
-                extents = mesh.bounds
+                rot, trans = rot_trans[object_id]
+                points = (np.matmul(rot, points.T)).T[:, :3]
 
-                boxsize = extents[1, :] - extents[0,:]
-                center = (extents[1, :] + extents[0,:])/2
-                boxsize = np.maximum(boxsize, 1) + self.points_padding
-                points_uniform = np.random.rand(n_points_uniform, 3)
-                points_uniform = boxsize * (points_uniform - 0.5) + center
-
-                points_surface = mesh.sample(n_points_surface)
-                points_surface += self.points_sigma * np.random.randn(n_points_surface, 3)
-                points = np.concatenate([points_uniform, points_surface], axis=0)
-
-                occupancies = check_mesh_contains(mesh, points)
-                occupancies = occupancies.astype(np.float32)
-
+                occupancies = occs[object_id]
                 # add some noise
                 if points.dtype == np.float16 and self.mode == 'train':
                     points = points.astype(np.float32)
-                    points += 1e-4 * np.random.randn(*points.shape)
+                    #points += 1e-4 * np.random.randn(*points.shape)
                 else:
                     points = points.astype(np.float32)
+                occupancies = np.unpackbits(occupancies)[:points.shape[0]]
+                occupancies = occupancies.astype(np.float32)
 
                 data = {'points':points, 'occ': occupancies}
                 data = self.points_transform(data)
@@ -691,6 +713,49 @@ class ISCNet_TdwPhysics(ScanNet):
                 ret_dict['object_points_iou_occ'] = object_points_iou_occ.astype(np.float32)
                 ret_dict['shapenet_catids'] = shapenet_catids
                 ret_dict['shapenet_ids'] = shapenet_ids
+
+        #self.visualization = 1
+        if self.visualization:
+            # visualize the points
+            #transform_m = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
+            transform_m = np.eye(3)
+            for obj_id in range(8,9):
+                points = points_data["points"][obj_id]
+                occ = points_data["occ"][obj_id]
+                orientation = 0
+                occ_points = points[occ > 0, :]
+                print(occ_points.max(0), occ_points.min(0))
+                axis_rectified = np.array([[np.cos(orientation), np.sin(orientation), 0], [-np.sin(orientation), np.cos(orientation), 0], [0, 0, 1]])
+
+
+                obj_center =  target_bboxes[obj_id,:3]
+                obj_boxsize = target_bboxes[obj_id, 3:6]
+                occ_points = occ_points.dot(transform_m.T)
+                print("point boundary", points.max(0) - points.min(0))
+                print("object boxsize", obj_boxsize)
+                print("occ point boundary", (occ_points.max(0) - occ_points.min(0)))
+                obj_points = (occ_points.dot(np.diag(1/(occ_points.max(0) - occ_points.min(0)))).dot(np.diag(obj_boxsize))).dot(axis_rectified) + obj_center
+                #+ np.array([0,0,3])
+                obj_points = np.concatenate([obj_points, obj_points + np.array([0,0,1])], axis=0)
+
+
+            axis = trimesh.creation.axis(axis_length=1)
+
+            vote_label = (point_cloud[:,:3] + point_votes[:,:3])[point_votes_mask > 0]
+            n_vote_label = vote_label.shape[0]
+
+            world_colors = np.repeat(np.array([[0,0,0,0.5]]), point_cloud.shape[0] + target_bboxes.shape[0] + n_vote_label + obj_points.shape[0], axis=0)
+
+            world_colors[point_cloud.shape[0]:  point_cloud.shape[0] + target_bboxes.shape[0], :] = np.array([[0,1,0,0.5]])
+            world_colors[point_cloud.shape[0] + target_bboxes.shape[0]:] = np.array([[1,0,0,0.5]])
+            world_colors[point_cloud.shape[0] + target_bboxes.shape[0] + n_vote_label :] = np.array([[1,1,0,0.5]])
+
+            pcds = trimesh.PointCloud(np.concatenate([point_cloud[:,:3], target_bboxes[:,:3], vote_label[:,:3], obj_points], axis=0), world_colors)
+            (trimesh.Scene(pcds) + axis).show()
+
+            import ipdb; ipdb.set_trace()
+
+
         return ret_dict
 
 

@@ -1,17 +1,19 @@
 method: ISCNet
-runname: detector_dominoes_rgbd_all
+runname: completion_only_debug2
 resume: False
-finetune: False
-weight: []
+finetune: True
+weight: [] #['out/iscnet/detector_dominoes_rgbd/model_epoch7_iter27000.pth']
 seed: 10
 device:
   use_gpu: True
-  gpu_ids: '2,3,4'
+  gpu_ids: '0,1,2,3,4,5,6,7,8,9'
   num_workers: 0
 data:
+  #fixed_timestep: 10
   dataset: tdw_physics
-  split: data_with_depth/dominoes #potentially can be a list
-  num_point: 50000
+  split: data_with_depth_small/dominoes #potentially can be a list
+  train_val: "train_debug.txt, valid_debug.txt"
+  num_point: 80000
   num_target: 256
   vote_factor: 1
   cluster_sampling: vote_fps
@@ -20,7 +22,7 @@ data:
   use_color_detection: True
   use_color_completion: False
   shapenet_path: datasets/ShapeNetv2_data
-  points_unpackbits: True
+  points_unpackbits: False
   points_subsample: [1024, 1024]
   hidden_dim: 512
   c_dim: 512
@@ -30,7 +32,6 @@ data:
   use_cls_for_completion: False
   skip_propagate: True
 model:
-
   backbone:
     method: Pointnet2Backbone
     loss: Null
@@ -50,7 +51,7 @@ model:
     weight: 1
 optimizer:
   method: Adam
-  lr: 1e-3
+  lr: 1e-4
   betas: [0.9, 0.999]
   eps: 1e-08
   weight_decay: 0
@@ -65,12 +66,12 @@ bnscheduler:
   bn_momentum_max: 0.001
 train:
   epochs: 240
-  phase: 'detection'
-  freeze: []
-  batch_size: 4
+  phase: 'completion'
+  freeze: ['backbone', 'voting', 'detection']
+  batch_size: 2
 val:
-  phase: 'detection'
-  batch_size: 8
+  phase: 'completion'
+  batch_size: 2
   use_cls_nms: True
   use_3d_nms: True
   ap_iou_thresholds: [0.25, 0.5]
@@ -80,10 +81,10 @@ val:
   per_class_proposal: True
   conf_thresh: 0.05
 demo:
-  phase: 'detection'
+  phase: 'completion'
 log:
   vis_path: visualization
   save_results: True
-  vis_step: 500
+  vis_step: 10
   print_step: 10
   path: out/iscnet

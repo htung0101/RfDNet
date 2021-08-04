@@ -1,23 +1,25 @@
 method: ISCNet
-runname: detector_dominoes
+runname: detector_debug2
 resume: False
-finetune: False
-weight: []
+finetune: True
+weight: ['out/iscnet/detector_dominoes_rgbd_all/model_epoch133_iter469000.pth']
 seed: 10
 device:
   use_gpu: True
   gpu_ids: '0,1,2,3,4,5,6,7,8,9'
   num_workers: 0
 data:
+  fixed_timestep: 10 # for debugging
   dataset: tdw_physics
   split: data_with_depth_small/dominoes #potentially can be a list
+  train_val: "train_debug.txt, valid_debug.txt"
   num_point: 50000
   num_target: 256
   vote_factor: 1
   cluster_sampling: vote_fps
   ap_iou_thresh: 0.25
   no_height: False
-  use_color_detection: False
+  use_color_detection: True
   use_color_completion: False
   shapenet_path: datasets/ShapeNetv2_data
   points_unpackbits: True
@@ -84,6 +86,6 @@ demo:
 log:
   vis_path: visualization
   save_results: True
-  vis_step: 100
+  vis_step: 1
   print_step: 10
   path: out/iscnet

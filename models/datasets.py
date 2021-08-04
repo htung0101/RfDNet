@@ -52,7 +52,18 @@ class ScanNet(Dataset):
             self.data_dir = [os.path.join(self.data_root, cfg.config['data']['split'], mode)]
 
             for ddir in self.data_dir:
-                file = open(ddir +  ".txt", "r")
+                filename = ddir + ".txt"
+                if "train_val" in cfg.config['data']:
+                    txt_names = [f.strip() for f in cfg.config['data']["train_val"].split(",")]
+                    found = False
+                    for name in txt_names:
+                        if mode in name:
+                            filename = os.path.join("/".join(filename.split("/")[:-1]), name)
+                            found = True
+                            break
+                    assert(found)
+                file = open(filename, "r")
+
                 ddir_root = "/".join(ddir.split("/")[:-1])
                 trial_names = [line.strip("\n") for line in file if line != "\n"]
                 n_trials = len(trial_names)

@@ -63,7 +63,7 @@ def parse_args():
                         help='Output path for voxelization.')
     parser.add_argument('--voxels_res', type=int, default=[16],
                         help='Resolution for voxelization.')
-    parser.add_argument('--points_folder', type=str, default='/media/htung/Extreme SSD/fish/RfDNet/data_with_depth',
+    parser.add_argument('--dataname', type=str, default='data_with_depth',
                         help='Output path for points.')
     parser.add_argument('--points_size', type=int, default=100000,
                         help='Size of points.')
@@ -108,7 +108,7 @@ def export_pointcloud(mesh, filename, loc, scale, args):
     np.savez(filename, points=points, normals=normals, loc=loc, scale=scale)
 
 
-import pymeshfix
+#import pymeshfix
 
 def export_voxels(mesh, dirname, clsname, modelname, loc, scale, args):
     if not mesh.is_watertight:
@@ -196,35 +196,62 @@ def get_views(n_camera_views):
 
 
 def render(vertices, faces, camera_Rs):
+    #np_vertices = camera_R.dot(vertices.astype(np.float64).T)
+    #np_faces = faces.astype(np.float64)
+    np_vertices = vertices.astype(np.float64)
+    np_faces = faces.astype(np.float64)
 
+    mesh = trimesh.Trimesh(vertices=np_vertices, faces=np_faces)
+    mesh = pyrender.Mesh.from_trimesh(mesh)
+
+    scene = pyrender.Scene()
+    scene.add(mesh)
+    camera = pyrender.PerspectiveCamera(yfov=2*np.arctan (image_size[0] / (2 * focal_length_x)), aspectRatio=1.0)
+    scene.add(camera, pose=np.eye(4)) # dummy
+    r = pyrender.OffscreenRenderer(image_size[0], image_size[1])
+    yup_T_down = np.eye(3)
+    yup_T_down[1,1] = -1
+    yup_T_down[2,2] = -1
     depth_maps = []
-    for camera_R in camera_Rs:
-        np_vertices = camera_R.dot(vertices.astype(np.float64).T)
-        np_vertices[2, :] += 1
-        np_faces = faces.astype(np.float64)
+    for camRs_T_world in camera_Rs:
+
 
         #depthmap, mask, img = pyrender.render(np_vertices.copy(), np_faces.T.copy(), render_intrinsics, znf, image_size)
+        # np_vertices = camRs_T_world.dot(vertices.astype(np.float64).T)
+        # np_vertices[2, :] += 1
+        # np_faces = faces.astype(np.float64)
+        # pose= np.eye(4)
+        # pose[1,1] = -1
+        # pose[2,2] = -1
+
+
+        # mesh = trimesh.Trimesh(vertices=np_vertices.T, faces=np_faces)
+
+        # #camera_node = scene.get_nodes(obj=camera).pop()
+        # #scene = pyrender.Scene.from_trimesh_scene(mesh)
+
+        # mesh = pyrender.Mesh.from_trimesh(mesh)
+        # scene = pyrender.Scene()
+        # scene.add(mesh)
+        # camera = pyrender.PerspectiveCamera(yfov=2*np.arctan (image_size[0] / (2 * focal_length_x)), aspectRatio=1.0)
+        # scene.add(camera, pose=pose)
+        # image, depthmap = r.render(scene)
+
+        camera_node = scene.get_nodes(obj=camera).pop()
+
+        world_T_camRs = np.linalg.inv(camRs_T_world)
         pose= np.eye(4)
-        pose[1,1] = -1
-        pose[2,2] = -1
-        import trimesh
-        mesh = trimesh.Trimesh(vertices=np_vertices.T, faces=np_faces)
+        pose[:3,:3] = np.matmul(world_T_camRs, yup_T_down)
+        z_axis = pose[:3,2]
+        pose[:3,3] = z_axis * (1/np.linalg.norm(z_axis))
 
-        # camera_node = scene.get_nodes(obj=camera).pop()
-        #scene = pyrender.Scene.from_trimesh_scene(mesh)
+        scene.set_pose(camera_node, pose=pose)
 
-        mesh = pyrender.Mesh.from_trimesh(mesh)
-        scene = pyrender.Scene()
-        scene.add(mesh)
-        camera = pyrender.PerspectiveCamera(yfov=2*np.arctan (image_size[0] / (2 * focal_length_x)), aspectRatio=1.0)
-
-        scene.add(camera, pose=pose)
-        r = pyrender.OffscreenRenderer(image_size[0], image_size[1])
         image, depthmap = r.render(scene)
 
-        import ipdb; ipdb.set_trace()
-        #import imageio
-        #imageio.imwrite("depth1.png", depthmap)
+        # import imageio
+        # imageio.imwrite("depth2.png", depthmap)
+        # import ipdb; ipdb.set_trace()
         # colors = np.ones((np_vertices.shape[1], 4), dtype=np.float32)
         # mesh2 = trimesh.Trimesh(vertices=np_vertices.T, faces=np_faces, colors=colors)
         # axis = trimesh.creation.axis(axis_length=1)
@@ -273,8 +300,8 @@ def make_watertight(mesh):
     depths = render(vertices=vertices_normalized, faces=faces, camera_Rs=camera_Rs)
 
 
-    import imageio
-    imageio.imwrite("depth.png", np.concatenate(depths[:200:10], axis=1))
+    # import imageio
+    # imageio.imwrite("depth.png", np.concatenate(depths[:200:10], axis=1))
 
     #import ipdb; ipdb.set_trace()
 
@@ -303,7 +330,7 @@ def export_points(mesh, filename, args):
     if not mesh.is_watertight:
         print('Warning: mesh %s is not watertight!'
               'Cannot sample points. Converting it...' % filename)
-        mesh2 = make_watertight(mesh)
+        mesh = make_watertight(mesh)
         # meshfix = pymeshfix.MeshFix(mesh.vertices, mesh.faces)
 
         # meshfix.repair()
@@ -315,10 +342,10 @@ def export_points(mesh, filename, args):
         #(mesh + axis).show()
         #import ipdb; ipdb.set_trace()
 
-        axis = trimesh.creation.axis(axis_length=1)
-        (mesh2 + axis).show()
-
-        import ipdb; ipdb.set_trace()
+        # axis = trimesh.creation.axis(axis_length=1)
+        # (mesh2 + axis).show()
+        # (mesh + axis).show()
+        # import ipdb; ipdb.set_trace()
 
 
         #return
@@ -331,7 +358,7 @@ def export_points(mesh, filename, args):
 
     boxsize = extents[1, :] - extents[0,:]
     center = (extents[1, :] + extents[0,:])/2
-    boxsize = np.maximum(boxsize, 1) + args.points_padding
+    boxsize = (np.maximum(boxsize, 1) + args.points_padding) * math.sqrt(2)
     points_uniform = np.random.rand(n_points_uniform, 3)
     points_uniform = boxsize * (points_uniform - 0.5) + center
 
@@ -360,8 +387,8 @@ def export_points(mesh, filename, args):
 
         pts_cam = trimesh.PointCloud(points, colors)
         pts_cam.show()
-    print(points.shape)
-    print(occupancies.shape)
+    # print(points.shape)
+    # print(occupancies.shape)
     return points, occupancies
     #print('Writing points: %s' % filename)
     #np.savez(filename, points=points, occupancies=occupancies,
@@ -431,23 +458,44 @@ def process_path(in_path, data_folder, output_root, args):
     occs = np.stack(occs, axis=0)
     locs = np.stack(locs, axis=0)
     scales = np.stack(scales, axis=0)
-
-    #import ipdb; ipdb.set_trace()
-    np.savez(filename, points=points, occupancies=occupancies,
-             loc=loc, scale=scale)
+    np.savez(filename, points=obj_points, occupancies=occs,
+             loc=loc, scale=scales)
 
     #print("hello")
 
 
 def main(args):
-    data_root = "/media/htung/Extreme SSD/fish/DPI-Net/data_with_depth_small"
-    scenario_folder = os.path.join(data_root, args.scenario)
+    import socket
+    hostname = socket.gethostname()
+    if hostname == "aw-m17-R2":
+        data_root = "/media/htung/Extreme SSD/fish/DPI-Net"
+        points_root = "/media/htung/Extreme SSD/fish/RfDNet"
+    elif hostname.endswith("ccncluster") or hostname.endswith("neuroaicluster") or "physion" in hostname:
+        data_path = f"/mnt/fs4/hsiaoyut"
+
+        data_root = "/mnt/fs4/hsiaoyut/DPI-Net"
+        points_root = "/mnt/fs4/hsiaoyut/RfDNet"
+
+        if hostname.endswith("node19-ccncluster"):
+            data_root = "/mnt/fs1/hsiaoyut/DPI-Net/data/"
+        #if "physion" in hostname:
+        out_root = "/mnt/fs1/hsiaoyut"
+    else:
+        raise ValueError
 
 
-    for arg_name in os.listdir(scenario_folder):
+    #data_root = "/media/htung/Extreme SSD/fish/DPI-Net"
+    #points_root = "/media/htung/Extreme SSD/fish/RfDNet"
+    scenario_folder = os.path.join(data_root, args.dataname, args.scenario)
+    points_folder = os.path.join(points_root, args.dataname)
+
+    for arg_name in os.listdir(scenario_folder)[:8]:
+        if arg_name.endswith(".txt"):
+            continue
         data_folder = os.path.join(scenario_folder, arg_name, args.mode)
-        output_folder = os.path.join(args.points_folder, args.scenario, arg_name, args.mode)
+        output_folder = os.path.join(points_folder, args.scenario, arg_name, args.mode)
         folder_ndata = [f for f in os.listdir(data_folder) if os.path.isdir(os.path.join(data_folder, f))]
+
 
         pkl_files = [os.path.join(path, "phases_dict.pkl")  for path in folder_ndata]
 

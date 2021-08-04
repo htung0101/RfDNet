@@ -299,7 +299,7 @@ class QueryAndGroup(nn.Module):
         if self.ret_unique_cnt:
             assert(self.sample_uniformly)
 
-    def forward(self, xyz, new_xyz, features=None):
+    def forward(self, xyz, new_xyz, features=None, return_assignment=False):
         # type: (QueryAndGroup, torch.Tensor. torch.Tensor, torch.Tensor) -> Tuple[Torch.Tensor]
         r"""
         Parameters
@@ -316,6 +316,8 @@ class QueryAndGroup(nn.Module):
         new_features : torch.Tensor
             (B, 3 + C, npoint, nsample) tensor
         """
+        # xyz: 1 x 50000 x 3, new_xyz: new_xyz
+        # 1 x 2048 x 64
         idx = ball_query(self.radius, self.nsample, xyz, new_xyz)
 
         if self.sample_uniformly:
@@ -355,6 +357,8 @@ class QueryAndGroup(nn.Module):
             ret.append(grouped_xyz)
         if self.ret_unique_cnt:
             ret.append(unique_cnt)
+        if return_assignment:
+            ret.append(idx)
         if len(ret) == 1:
             return ret[0]
         else:

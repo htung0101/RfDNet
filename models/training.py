@@ -1,7 +1,7 @@
 # Base trainer for methods.
 # author: ynie
 # date: Feb, 2020
-
+import os
 from torch.utils.tensorboard import SummaryWriter
 class BaseTrainer(object):
     '''
@@ -12,7 +12,8 @@ class BaseTrainer(object):
         self.net = net
         self.optimizer = optimizer
         self.device = device
-        self.writer = SummaryWriter("log")
+
+        self.writer = SummaryWriter(os.path.join(self.cfg.config["log"]["path"], "log"))
 
     def show_lr(self):
         '''

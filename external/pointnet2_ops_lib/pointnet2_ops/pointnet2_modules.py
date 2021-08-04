@@ -218,16 +218,18 @@ class PointnetSAModuleVotes(nn.Module):
 
         xyz_flipped = xyz.transpose(1, 2).contiguous()
         if inds is None:
+            # choose 2048 points from 50000
             inds = pointnet2_utils.furthest_point_sample(xyz, self.npoint) if self.npoint is not None else None
         else:
             assert (inds.shape[1] == self.npoint)
+
         new_xyz = pointnet2_utils.gather_operation(
             xyz_flipped, inds
         ).transpose(1, 2).contiguous() if self.npoint is not None else None
 
         if not self.ret_unique_cnt:
-            grouped_features, grouped_xyz = self.grouper(
-                xyz, new_xyz, features
+            grouped_features, grouped_xyz, point_label = self.grouper(
+                xyz, new_xyz, features, return_assignment=True
             )  # (B, C, npoint, nsample)
         else:
             grouped_features, grouped_xyz, unique_cnt = self.grouper(
@@ -255,7 +257,7 @@ class PointnetSAModuleVotes(nn.Module):
         new_features = new_features.squeeze(-1)  # (B, mlp[-1], npoint)
 
         if not self.ret_unique_cnt:
-            return new_xyz, new_features, inds
+            return new_xyz, new_features, inds, point_label
         else:
             return new_xyz, new_features, inds, unique_cnt
 

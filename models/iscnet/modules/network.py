@@ -320,14 +320,17 @@ class ISCNet(BaseNetwork):
         end_points['seed_xyz'] = xyz
         end_points['seed_features'] = features
 
+
         xyz, features = self.voting(xyz, features)
         features_norm = torch.norm(features, p=2, dim=1)
         features = features.div(features_norm.unsqueeze(1))
         end_points['vote_xyz'] = xyz
         end_points['vote_features'] = features
+
         # --------- DETECTION ---------
         if_proposal_feature = self.cfg.config[self.cfg.config['mode']]['phase'] == 'completion'
-        end_points, proposal_features = self.detection(xyz, features, end_points, if_proposal_feature)
+        end_points, proposal_features, point_label = self.detection(xyz, features, end_points, if_proposal_feature)
+        end_points["point_label_on_seed_xyz"] = point_label
 
         # --------- INSTANCE COMPLETION ---------
         if self.cfg.config[self.cfg.config['mode']]['phase'] == 'completion':

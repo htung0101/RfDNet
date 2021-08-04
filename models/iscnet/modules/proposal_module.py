@@ -98,7 +98,8 @@ class ProposalModule(nn.Module):
         """
         if self.sampling == 'vote_fps':
             # Farthest point sampling (FPS) on votes
-            xyz, features, fps_inds = self.vote_aggregation(xyz, features)
+            xyz, features, fps_inds, point_label = self.vote_aggregation(xyz, features)
+
             sample_inds = fps_inds
         elif self.sampling == 'seed_fps':
             # FPS on seed and choose the votes corresponding to the seeds
@@ -125,6 +126,6 @@ class ProposalModule(nn.Module):
         end_points = decode_scores(net, end_points, self.num_heading_bin, self.num_size_cluster)
 
         if export_proposal_feature:
-            return end_points, features
+            return end_points, features, point_label
         else:
-            return end_points, None
+            return end_points, None, point_label
